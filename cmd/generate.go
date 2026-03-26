@@ -78,7 +78,7 @@ func runGenerate(args []string) error {
 	}
 
 	// --- Show options to user ---
-	fmt.Println("\n¿Dónde deseas crear el documento? Selecciona una opción:\n")
+	fmt.Print("\n¿Dónde deseas crear el documento? Selecciona una opción:\n\n")
 	for i, p := range pages {
 		fmt.Printf("  [%d] %s\n", i+1, p.Title)
 		fmt.Printf("      %s\n\n", p.WebURL)
