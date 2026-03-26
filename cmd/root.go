@@ -19,6 +19,11 @@ func Execute() error {
 	}
 
 	cmdName := os.Args[1]
+	if cmdName == "help" || cmdName == "--help" || cmdName == "-h" {
+		printUsage()
+		return nil
+	}
+
 	fn, ok := commands[cmdName]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "Comando desconocido: %s\n\n", cmdName)
