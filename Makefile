@@ -224,14 +224,23 @@ release: lint build-all
 	echo "$(YELLOW)  Versión actual : $$CURRENT$(NC)"; \
 	echo "$(GREEN)  Nueva versión  : $$NEW_TAG$(NC)"; \
 	echo ""; \
-	echo "$(YELLOW)[1/2]$(NC) Creando tag $$NEW_TAG..."; \
+	echo "$(YELLOW)[1/3]$(NC) Commiteando y creando tag $$NEW_TAG..."; \
 	git add -A; \
 	git commit -m "release: $$NEW_TAG" 2>/dev/null || true; \
 	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
 	echo "$(GREEN)✓ Tag creado$(NC)"; \
 	echo ""; \
-	echo "$(YELLOW)[2/2]$(NC) Subiendo a GitHub..."; \
+	echo "$(YELLOW)[2/3]$(NC) Subiendo a GitHub..."; \
 	git push origin $(BRANCH) --tags; \
+	echo "$(GREEN)✓ Push completado$(NC)"; \
+	echo ""; \
+	echo "$(YELLOW)[3/3]$(NC) Publicando binarios en GitHub Releases..."; \
+	gh release create $$NEW_TAG \
+		$(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
+		$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe \
+		$(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 \
+		--title "$$NEW_TAG" \
+		--notes "Release $$NEW_TAG"; \
 	echo ""; \
 	echo "$(GREEN)✓ Release $$NEW_TAG completado$(NC)"; \
 	echo "$(CYAN)  https://github.com/geomark27/deploy-doc/releases/tag/$$NEW_TAG$(NC)"
@@ -247,6 +256,12 @@ release-minor: lint build-all
 	git commit -m "release: $$NEW_TAG" 2>/dev/null || true; \
 	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
 	git push origin $(BRANCH) --tags; \
+	gh release create $$NEW_TAG \
+		$(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
+		$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe \
+		$(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 \
+		--title "$$NEW_TAG" \
+		--notes "Release $$NEW_TAG"; \
 	echo "$(GREEN)✓ Release minor $$NEW_TAG completado$(NC)"
 
 .PHONY: release-major
@@ -259,4 +274,10 @@ release-major: lint build-all
 	git commit -m "release: $$NEW_TAG" 2>/dev/null || true; \
 	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
 	git push origin $(BRANCH) --tags; \
+	gh release create $$NEW_TAG \
+		$(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
+		$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe \
+		$(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 \
+		--title "$$NEW_TAG" \
+		--notes "Release $$NEW_TAG"; \
 	echo "$(GREEN)✓ Release major $$NEW_TAG completado$(NC)"
