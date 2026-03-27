@@ -15,8 +15,12 @@ type CommitFiles struct {
 
 // GetChangedFiles runs git show --name-only and returns the list of changed files.
 func GetChangedFiles(commitHash string) ([]string, error) {
-	out, err := exec.Command("git", "show", "--name-only", "--format=", commitHash).Output()
+	cmd := exec.Command("git", "show", "--name-only", "--format=", commitHash)
+	out, err := cmd.Output()
 	if err != nil {
+		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
+			return nil, fmt.Errorf("error al leer el commit %s: %s", commitHash, strings.TrimSpace(string(ee.Stderr)))
+		}
 		return nil, fmt.Errorf("error al leer el commit %s: %w", commitHash, err)
 	}
 

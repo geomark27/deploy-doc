@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/geomark27/deploy-doc/internal/atlassian"
@@ -35,6 +36,7 @@ func runGenerate(args []string) error {
 	}
 
 	client := atlassian.NewClient(cfg.BaseURL, cfg.AtlassianEmail, cfg.AtlassianToken)
+	reader := bufio.NewReader(os.Stdin)
 
 	// --- Get Jira issue ---
 	fmt.Printf("Buscando issue %s...\n", issue)
@@ -43,6 +45,32 @@ func runGenerate(args []string) error {
 		return err
 	}
 	fmt.Printf("✓ %s - %s\n\n", jiraIssue.Key, jiraIssue.Summary)
+
+	// --- Check for existing deploy doc ---
+	fmt.Printf("Verificando documentos existentes para %s...\n", issue)
+	existingDoc, err := client.FindDeployDocByIssue(issue)
+	if err != nil {
+		return err
+	}
+
+	var updateExisting bool
+	if existingDoc != nil {
+		fmt.Printf("\nYa existe un documento de despliegue para %s:\n", issue)
+		fmt.Printf("  Título: %s\n", existingDoc.Title)
+		fmt.Printf("  URL:    %s\n\n", existingDoc.WebURL)
+		fmt.Print("¿Qué deseas hacer?\n  [1] Actualizar el documento existente\n  [2] Crear uno nuevo de todas formas\n  [3] Cancelar\n\nOpción: ")
+		choice, _ := reader.ReadString('\n')
+		choice = strings.TrimSpace(choice)
+		switch choice {
+		case "1":
+			updateExisting = true
+		case "2":
+			// continue with normal create flow
+		default:
+			fmt.Println("Cancelado.")
+			return nil
+		}
+	}
 
 	// --- Get changed files ---
 	var backendFiles, frontendFiles map[string][]string
@@ -67,6 +95,48 @@ func runGenerate(args []string) error {
 		fmt.Printf("✓ %d archivos encontrados\n\n", len(files))
 	}
 
+	// --- Build title and ADF ---
+	title := document.BuildTitle(jiraIssue.Key, jiraIssue.Summary)
+	adf := document.Build(document.DeployDoc{
+		IssueKey:       jiraIssue.Key,
+		IssueSummary:   jiraIssue.Summary,
+		IssueURL:       jiraIssue.URL,
+		BackendRepo:    "operativo-api",
+		BackendCommit:  commitBackend,
+		BackendFiles:   backendFiles,
+		FrontendRepo:   "echo-logistics",
+		FrontendCommit: commitFrontend,
+		FrontendFiles:  frontendFiles,
+	})
+
+	// --- Update existing page ---
+	if updateExisting {
+		fmt.Printf("Título: %s\n", title)
+		fmt.Print("\n¿Confirmas la actualización? [S/n]: ")
+		confirm, _ := reader.ReadString('\n')
+		confirm = strings.TrimSpace(strings.ToLower(confirm))
+		if confirm == "n" || confirm == "no" {
+			fmt.Println("Cancelado.")
+			return nil
+		}
+
+		fmt.Println("Obteniendo versión actual del documento...")
+		existingFull, err := client.GetPage(existingDoc.ID)
+		if err != nil {
+			return err
+		}
+
+		fmt.Println("Actualizando documento en Confluence...")
+		page, err := client.UpdatePage(existingFull.ID, title, existingFull.Version, adf)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("\n✓ Documento actualizado exitosamente!\n")
+		fmt.Printf("  %s\n", page.WebURL)
+		return nil
+	}
+
 	// --- Find last deploy doc for location ---
 	fmt.Println("Buscando tus documentos de despliegue recientes...")
 	pages, err := client.FindLastDeployDoc()
@@ -84,38 +154,15 @@ func runGenerate(args []string) error {
 		fmt.Printf("      %s\n\n", p.WebURL)
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Opción (1-5): ")
+	fmt.Printf("Opción (1-%d): ", len(pages))
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 
-	var selected atlassian.Page
-	switch input {
-	case "1":
-		selected = pages[0]
-	case "2":
-		if len(pages) < 2 {
-			return fmt.Errorf("opción inválida")
-		}
-		selected = pages[1]
-	case "3":
-		if len(pages) < 3 {
-			return fmt.Errorf("opción inválida")
-		}
-		selected = pages[2]
-	case "4":
-		if len(pages) < 4 {
-			return fmt.Errorf("opción inválida")
-		}
-		selected = pages[3]
-	case "5":
-		if len(pages) < 5 {
-			return fmt.Errorf("opción inválida")
-		}
-		selected = pages[4]
-	default:
-		return fmt.Errorf("opción inválida")
+	n, convErr := strconv.Atoi(input)
+	if convErr != nil || n < 1 || n > len(pages) {
+		return fmt.Errorf("opción inválida: ingresa un número entre 1 y %d", len(pages))
 	}
+	selected := pages[n-1]
 
 	// --- Get parent page of selected doc ---
 	fmt.Printf("\nObteniendo ubicación de '%s'...\n", selected.Title)
@@ -127,7 +174,6 @@ func runGenerate(args []string) error {
 	fmt.Printf("✓ El nuevo documento se creará en el mismo lugar\n\n")
 
 	// --- Confirm ---
-	title := document.BuildTitle(jiraIssue.Key, jiraIssue.Summary)
 	fmt.Printf("Título: %s\n", title)
 	fmt.Print("\n¿Confirmas la creación? [S/n]: ")
 	confirm, _ := reader.ReadString('\n')
@@ -136,19 +182,6 @@ func runGenerate(args []string) error {
 		fmt.Println("Cancelado.")
 		return nil
 	}
-
-	// --- Build ADF ---
-	adf := document.Build(document.DeployDoc{
-		IssueKey:       jiraIssue.Key,
-		IssueSummary:   jiraIssue.Summary,
-		IssueURL:       jiraIssue.URL,
-		BackendRepo:    "operativo-api",
-		BackendCommit:  commitBackend,
-		BackendFiles:   backendFiles,
-		FrontendRepo:   "echo-logistics",
-		FrontendCommit: commitFrontend,
-		FrontendFiles:  frontendFiles,
-	})
 
 	// --- Create page ---
 	fmt.Println("Creando documento en Confluence...")

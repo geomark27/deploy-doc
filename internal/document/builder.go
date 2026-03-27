@@ -53,8 +53,17 @@ func Build(doc DeployDoc) map[string]any {
 }
 
 // BuildTitle constructs the page title from the issue key and summary.
+// Special characters that Confluence does not allow in page titles are replaced.
 func BuildTitle(issueKey, summary string) string {
-	return fmt.Sprintf("Documento de Despliegue - %s - %s", issueKey, summary)
+	replacer := strings.NewReplacer(
+		"/", "-",
+		":", "-",
+		"|", "-",
+		"[", "(",
+		"]", ")",
+	)
+	sanitized := strings.TrimSpace(replacer.Replace(summary))
+	return fmt.Sprintf("Documento de Despliegue - %s - %s", issueKey, sanitized)
 }
 
 // headerTable builds the Épica + Tarea(s) table.

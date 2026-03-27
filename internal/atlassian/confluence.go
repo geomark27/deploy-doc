@@ -12,6 +12,7 @@ type Page struct {
 	Title    string `json:"title"`
 	ParentID string `json:"parentId"`
 	SpaceID  string `json:"spaceId"`
+	Version  int
 	WebURL   string
 }
 
@@ -37,7 +38,10 @@ type pageResponse struct {
 	Title    string `json:"title"`
 	ParentID string `json:"parentId"`
 	SpaceID  string `json:"spaceId"`
-	Links    struct {
+	Version  struct {
+		Number int `json:"number"`
+	} `json:"version"`
+	Links struct {
 		WebUI string `json:"webui"`
 	} `json:"_links"`
 }
@@ -89,12 +93,45 @@ func (c *Client) GetPage(pageID string) (*Page, error) {
 		Title:    resp.Title,
 		ParentID: resp.ParentID,
 		SpaceID:  resp.SpaceID,
+		Version:  resp.Version.Number,
 		WebURL:   c.BaseURL + "/wiki" + resp.Links.WebUI,
+	}, nil
+}
+
+// FindDeployDocByIssue searches for an existing deploy doc matching the given issue key.
+func (c *Client) FindDeployDocByIssue(issueKey string) (*Page, error) {
+	cql := url.QueryEscape(fmt.Sprintf(`title ~ "Documento de Despliegue" AND title ~ "%s" AND creator = currentUser()`, issueKey))
+	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=1", cql)
+
+	body, err := c.Get(path)
+	if err != nil {
+		return nil, fmt.Errorf("error buscando documento existente: %w", err)
+	}
+
+	var result searchResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("error parseando respuesta: %w", err)
+	}
+
+	if len(result.Results) == 0 {
+		return nil, nil
+	}
+
+	r := result.Results[0]
+	return &Page{
+		ID:     r.Content.ID,
+		Title:  r.Content.Title,
+		WebURL: c.BaseURL + "/wiki" + r.Content.Links.WebUI,
 	}, nil
 }
 
 // CreatePage creates a new Confluence page under the given parent.
 func (c *Client) CreatePage(spaceID, parentID, title string, adfBody map[string]any) (*Page, error) {
+	adfStr, err := marshalADF(adfBody)
+	if err != nil {
+		return nil, err
+	}
+
 	payload := map[string]any{
 		"spaceId":  spaceID,
 		"parentId": parentID,
@@ -102,7 +139,7 @@ func (c *Client) CreatePage(spaceID, parentID, title string, adfBody map[string]
 		"status":   "current",
 		"body": map[string]any{
 			"representation": "atlas_doc_format",
-			"value":          mustMarshal(adfBody),
+			"value":          adfStr,
 		},
 	}
 
@@ -123,11 +160,49 @@ func (c *Client) CreatePage(spaceID, parentID, title string, adfBody map[string]
 	}, nil
 }
 
-// mustMarshal serializes a value to JSON string, panics on error (only for internal use).
-func mustMarshal(v any) string {
+// UpdatePage updates an existing Confluence page with new content.
+func (c *Client) UpdatePage(pageID, title string, currentVersion int, adfBody map[string]any) (*Page, error) {
+	adfStr, err := marshalADF(adfBody)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := map[string]any{
+		"id":     pageID,
+		"status": "current",
+		"title":  title,
+		"version": map[string]any{
+			"number":  currentVersion + 1,
+			"message": "Actualizado via deploy-doc",
+		},
+		"body": map[string]any{
+			"representation": "atlas_doc_format",
+			"value":          adfStr,
+		},
+	}
+
+	body, err := c.Put(fmt.Sprintf("/wiki/api/v2/pages/%s", pageID), payload)
+	if err != nil {
+		return nil, fmt.Errorf("error actualizando página: %w", err)
+	}
+
+	var resp pageResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("error parseando respuesta de actualización: %w", err)
+	}
+
+	return &Page{
+		ID:     resp.ID,
+		Title:  resp.Title,
+		WebURL: c.BaseURL + "/wiki" + resp.Links.WebUI,
+	}, nil
+}
+
+// marshalADF serializes the ADF document to a JSON string.
+func marshalADF(v any) (string, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
-		panic(fmt.Sprintf("error serializando ADF: %v", err))
+		return "", fmt.Errorf("error serializando ADF: %w", err)
 	}
-	return string(b)
+	return string(b), nil
 }
