@@ -74,25 +74,41 @@ func runGenerate(args []string) error {
 
 	// --- Get changed files ---
 	var backendFiles, frontendFiles map[string][]string
+	var commitErrors []string
 
 	if commitBackend != "" {
 		fmt.Printf("Leyendo commit backend %s...\n", commitBackend)
 		files, err := getFilesForCommit(commitBackend)
 		if err != nil {
-			return err
+			fmt.Printf("✗ Backend: %v\n\n", err)
+			commitErrors = append(commitErrors, fmt.Sprintf("backend: %v", err))
+		} else {
+			backendFiles = git.GroupByDirectory(files)
+			fmt.Printf("✓ %d archivos encontrados\n\n", len(files))
 		}
-		backendFiles = git.GroupByDirectory(files)
-		fmt.Printf("✓ %d archivos encontrados\n\n", len(files))
 	}
 
 	if commitFrontend != "" {
 		fmt.Printf("Leyendo commit frontend %s...\n", commitFrontend)
 		files, err := getFilesForCommit(commitFrontend)
 		if err != nil {
-			return err
+			fmt.Printf("✗ Frontend: %v\n\n", err)
+			commitErrors = append(commitErrors, fmt.Sprintf("frontend: %v", err))
+		} else {
+			frontendFiles = git.GroupByDirectory(files)
+			fmt.Printf("✓ %d archivos encontrados\n\n", len(files))
 		}
-		frontendFiles = git.GroupByDirectory(files)
-		fmt.Printf("✓ %d archivos encontrados\n\n", len(files))
+	}
+
+	// If ALL commits failed, abort
+	if len(commitErrors) > 0 && backendFiles == nil && frontendFiles == nil {
+		return fmt.Errorf("no se pudo leer ningún commit. Verifica que estás en el repositorio correcto y que los hashes son válidos")
+	}
+
+	// If only some failed, warn but continue with what we have
+	if len(commitErrors) > 0 {
+		fmt.Println("⚠ Advertencia: uno de los commits falló. El documento se creará solo con la información disponible.")
+		fmt.Println()
 	}
 
 	// --- Build title and ADF ---
