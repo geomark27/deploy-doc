@@ -7,7 +7,9 @@ import (
 	"runtime"
 
 	"github.com/geomark27/deploy-doc/cmd"
+	"github.com/geomark27/deploy-doc/internal/build"
 	"github.com/geomark27/deploy-doc/internal/installer"
+	"github.com/geomark27/deploy-doc/internal/updater"
 )
 
 func main() {
@@ -47,9 +49,43 @@ func main() {
 		os.Exit(0)
 	}
 
-	if err := cmd.Execute(); err != nil {
+	// Clean up leftover .old binary on Windows from a previous update
+	updater.CleanOldBinary()
+
+	// Background update check (skip on update/help/version commands)
+	updateCh := make(chan string, 1)
+	if shouldCheckUpdate() {
+		go func() {
+			latest, err := updater.CheckLatest(build.Version)
+			if err == nil && latest != "" {
+				updateCh <- latest
+			}
+		}()
+	}
+
+	err := cmd.Execute()
+
+	// Print update notification after command finishes
+	select {
+	case latest := <-updateCh:
+		fmt.Printf("\nNueva version disponible: %s  →  ejecuta: deploy-doc update\n", latest)
+	default:
+	}
+
+	if err != nil {
 		os.Exit(1)
 	}
+}
+
+func shouldCheckUpdate() bool {
+	if len(os.Args) < 2 {
+		return false
+	}
+	switch os.Args[1] {
+	case "update", "version", "--version", "-v", "help", "--help", "-h":
+		return false
+	}
+	return true
 }
 
 func pause() {

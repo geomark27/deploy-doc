@@ -7,6 +7,7 @@ BUILD_DIR=./bin
 MAIN=./main.go
 MODULE=github.com/geomark27/deploy-doc
 BRANCH := $(shell git branch --show-current 2>/dev/null || echo "main")
+VERSION_PKG=github.com/geomark27/deploy-doc/internal/build
 
 .DEFAULT_GOAL=help
 
@@ -80,9 +81,9 @@ build:
 build-all:
 	@echo "$(YELLOW)Compilando para todos los sistemas operativos...$(NC)"
 	@mkdir -p $(BUILD_DIR)
-	@GOOS=linux   GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN)
-	@GOOS=windows GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN)
-	@GOOS=darwin  GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN)
+	@GOOS=linux   GOARCH=amd64 go build -ldflags "-X $(VERSION_PKG).Version=$(VER)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN)
+	@GOOS=windows GOARCH=amd64 go build -ldflags "-X $(VERSION_PKG).Version=$(VER)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN)
+	@GOOS=darwin  GOARCH=amd64 go build -ldflags "-X $(VERSION_PKG).Version=$(VER)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN)
 	@echo "$(GREEN)✓ Binarios generados en $(BUILD_DIR)/$(NC)"
 
 # ----------------------------------------------------------------
@@ -210,7 +211,7 @@ version:
 	echo "$(CYAN)Versión actual: $$CURRENT$(NC)"
 
 .PHONY: release
-release: lint build-all
+release: lint
 	@CURRENT=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
 	MAJOR=$$(echo $$CURRENT | cut -d. -f1 | tr -d 'v'); \
 	MINOR=$$(echo $$CURRENT | cut -d. -f2); \
@@ -223,6 +224,9 @@ release: lint build-all
 	echo ""; \
 	echo "$(YELLOW)  Versión actual : $$CURRENT$(NC)"; \
 	echo "$(GREEN)  Nueva versión  : $$NEW_TAG$(NC)"; \
+	echo ""; \
+	echo "$(YELLOW)[0/3]$(NC) Compilando binarios con version $$NEW_TAG..."; \
+	$(MAKE) build-all VER=$$NEW_TAG; \
 	echo ""; \
 	echo "$(YELLOW)[1/3]$(NC) Commiteando y creando tag $$NEW_TAG..."; \
 	git add -A; \
@@ -246,12 +250,13 @@ release: lint build-all
 	echo "$(CYAN)  https://github.com/geomark27/deploy-doc/releases/tag/$$NEW_TAG$(NC)"
 
 .PHONY: release-minor
-release-minor: lint build-all
+release-minor: lint
 	@CURRENT=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
 	MAJOR=$$(echo $$CURRENT | cut -d. -f1 | tr -d 'v'); \
 	MINOR=$$(echo $$CURRENT | cut -d. -f2); \
 	NEW_MINOR=$$((MINOR + 1)); \
 	NEW_TAG="v$$MAJOR.$$NEW_MINOR.0"; \
+	$(MAKE) build-all VER=$$NEW_TAG; \
 	git add -A; \
 	git commit -m "release: $$NEW_TAG" 2>/dev/null || true; \
 	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
@@ -265,11 +270,12 @@ release-minor: lint build-all
 	echo "$(GREEN)✓ Release minor $$NEW_TAG completado$(NC)"
 
 .PHONY: release-major
-release-major: lint build-all
+release-major: lint
 	@CURRENT=$$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0"); \
 	MAJOR=$$(echo $$CURRENT | cut -d. -f1 | tr -d 'v'); \
 	NEW_MAJOR=$$((MAJOR + 1)); \
 	NEW_TAG="v$$NEW_MAJOR.0.0"; \
+	$(MAKE) build-all VER=$$NEW_TAG; \
 	git add -A; \
 	git commit -m "release: $$NEW_TAG" 2>/dev/null || true; \
 	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
