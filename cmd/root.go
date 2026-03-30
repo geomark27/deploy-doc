@@ -12,6 +12,7 @@ var commands = map[string]func([]string) error{
 	"init":     runInit,
 	"generate": runGenerate,
 	"update":   runUpdate,
+	"project":  runProject,
 }
 
 // Execute is the entry point for the CLI.
@@ -49,13 +50,24 @@ Uso:
 
 Comandos:
   init      Configura tus credenciales de Atlassian
-  generate  Genera un documento de despliegue
+  generate  Genera un documento de despliegue en Confluence
+  project   Gestiona proyectos (list, add, default, remove)
   update    Actualiza deploy-doc a la ultima version
   version   Muestra la version actual
+
+Flags de generate:
+  --issue            Clave del issue en Jira (requerido)
+  --commit-backend   Hash del commit de backend
+  --commit-frontend  Hash del commit de frontend
+  --project          Nombre del proyecto a usar (opcional)
 
 Ejemplos:
   deploy-doc init
   deploy-doc generate --issue APP-1999 --commit-backend 27cefd86 --commit-frontend 5bd0cea0
+  deploy-doc generate --project ecuapass --issue ECU-123 --commit-backend abc1234
+  deploy-doc project list
+  deploy-doc project add
+  deploy-doc project default echo
   deploy-doc update
 `, build.Version)
 }

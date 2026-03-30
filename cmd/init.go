@@ -31,10 +31,17 @@ func runInit(args []string) error {
 		return err
 	}
 
+	// Load existing config to preserve projects if any
+	existing, _ := config.Load()
+
 	cfg := &config.Config{
 		AtlassianEmail: email,
 		AtlassianToken: token,
 		BaseURL:        baseURL,
+	}
+	if existing != nil {
+		cfg.DefaultProject = existing.DefaultProject
+		cfg.Projects = existing.Projects
 	}
 
 	if err := config.Save(cfg); err != nil {
@@ -43,7 +50,79 @@ func runInit(args []string) error {
 
 	path, _ := config.ConfigPath()
 	fmt.Printf("\n✓ Configuración guardada en %s\n", path)
+
+	// --- Optional: configure first project ---
+	fmt.Println()
+	fmt.Print("¿Deseas configurar un proyecto ahora? [S/n]: ")
+	ans, _ := reader.ReadString('\n')
+	ans = strings.TrimSpace(strings.ToLower(ans))
+	if ans == "" || ans == "s" || ans == "si" || ans == "sí" {
+		if err := configureProject(reader, cfg); err != nil {
+			return err
+		}
+	}
+
+	fmt.Println()
 	fmt.Println("Ya puedes usar: deploy-doc generate --issue APP-XXXX ...")
+	return nil
+}
+
+// configureProject runs the interactive project setup and saves to cfg.
+func configureProject(reader *bufio.Reader, cfg *config.Config) error {
+	fmt.Println()
+	fmt.Println("--- Configuración de proyecto ---")
+
+	name, err := prompt(reader, "Nombre del proyecto (ej: echo)")
+	if err != nil {
+		return err
+	}
+
+	proj := &config.ProjectConfig{}
+
+	proj.BackendPath, err = promptOptional(reader, "Ruta del repositorio backend")
+	if err != nil {
+		return err
+	}
+	if proj.BackendPath != "" {
+		proj.BackendRepo, err = promptWithDefault(reader, "Nombre del repositorio backend", name+"-api")
+		if err != nil {
+			return err
+		}
+	}
+
+	proj.FrontendPath, err = promptOptional(reader, "Ruta del repositorio frontend")
+	if err != nil {
+		return err
+	}
+	if proj.FrontendPath != "" {
+		proj.FrontendRepo, err = promptWithDefault(reader, "Nombre del repositorio frontend", name)
+		if err != nil {
+			return err
+		}
+	}
+
+	if proj.BackendPath == "" && proj.FrontendPath == "" {
+		fmt.Println("No se configuraron rutas. Proyecto omitido.")
+		return nil
+	}
+
+	if cfg.Projects == nil {
+		cfg.Projects = make(map[string]*config.ProjectConfig)
+	}
+	cfg.Projects[name] = proj
+
+	fmt.Print("¿Establecer como proyecto por defecto? [S/n]: ")
+	ans, _ := reader.ReadString('\n')
+	ans = strings.TrimSpace(strings.ToLower(ans))
+	if ans == "" || ans == "s" || ans == "si" || ans == "sí" {
+		cfg.DefaultProject = name
+	}
+
+	if err := config.Save(cfg); err != nil {
+		return fmt.Errorf("error guardando proyecto: %w", err)
+	}
+
+	fmt.Printf("✓ Proyecto '%s' configurado\n", name)
 	return nil
 }
 
@@ -73,4 +152,13 @@ func promptWithDefault(r *bufio.Reader, label, defaultVal string) (string, error
 		return defaultVal, nil
 	}
 	return val, nil
+}
+
+func promptOptional(r *bufio.Reader, label string) (string, error) {
+	fmt.Printf("%s (Enter para omitir): ", label)
+	val, err := r.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(val), nil
 }

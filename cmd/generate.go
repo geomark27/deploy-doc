@@ -21,6 +21,7 @@ func runGenerate(args []string) error {
 	issue := flags["--issue"]
 	commitBackend := flags["--commit-backend"]
 	commitFrontend := flags["--commit-frontend"]
+	projectName := flags["--project"]
 
 	if issue == "" {
 		return fmt.Errorf("--issue es requerido. Ej: deploy-doc generate --issue APP-1999")
@@ -33,6 +34,39 @@ func runGenerate(args []string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
+	}
+
+	// --- Resolve project ---
+	proj, resolvedName, err := cfg.GetProject(projectName)
+	if err != nil {
+		return err
+	}
+
+	// Determine workDirs and repo names from project (or fallback defaults)
+	var backendWorkDir, frontendWorkDir string
+	backendRepo := "operativo-api"
+	frontendRepo := "echo-logistics"
+
+	if proj != nil {
+		backendWorkDir = proj.BackendPath
+		frontendWorkDir = proj.FrontendPath
+		if proj.BackendRepo != "" {
+			backendRepo = proj.BackendRepo
+		}
+		if proj.FrontendRepo != "" {
+			frontendRepo = proj.FrontendRepo
+		}
+		if resolvedName != "" {
+			fmt.Printf("Proyecto: %s\n", resolvedName)
+		}
+	}
+
+	// Warn if commit provided but no path configured for that side
+	if commitBackend != "" && proj != nil && proj.BackendPath == "" {
+		fmt.Println("Advertencia: el proyecto no tiene backend_path configurado. Git correra en el directorio actual.")
+	}
+	if commitFrontend != "" && proj != nil && proj.FrontendPath == "" {
+		fmt.Println("Advertencia: el proyecto no tiene frontend_path configurado. Git correra en el directorio actual.")
 	}
 
 	client := atlassian.NewClient(cfg.BaseURL, cfg.AtlassianEmail, cfg.AtlassianToken)
@@ -78,7 +112,7 @@ func runGenerate(args []string) error {
 
 	if commitBackend != "" {
 		fmt.Printf("Leyendo commit backend %s...\n", commitBackend)
-		files, err := getFilesForCommit(commitBackend)
+		files, err := getFilesForCommit(commitBackend, backendWorkDir)
 		if err != nil {
 			fmt.Printf("✗ Backend: %v\n\n", err)
 			commitErrors = append(commitErrors, fmt.Sprintf("backend: %v", err))
@@ -90,7 +124,7 @@ func runGenerate(args []string) error {
 
 	if commitFrontend != "" {
 		fmt.Printf("Leyendo commit frontend %s...\n", commitFrontend)
-		files, err := getFilesForCommit(commitFrontend)
+		files, err := getFilesForCommit(commitFrontend, frontendWorkDir)
 		if err != nil {
 			fmt.Printf("✗ Frontend: %v\n\n", err)
 			commitErrors = append(commitErrors, fmt.Sprintf("frontend: %v", err))
@@ -117,10 +151,10 @@ func runGenerate(args []string) error {
 		IssueKey:       jiraIssue.Key,
 		IssueSummary:   jiraIssue.Summary,
 		IssueURL:       jiraIssue.URL,
-		BackendRepo:    "operativo-api",
+		BackendRepo:    backendRepo,
 		BackendCommit:  commitBackend,
 		BackendFiles:   backendFiles,
-		FrontendRepo:   "echo-logistics",
+		FrontendRepo:   frontendRepo,
 		FrontendCommit: commitFrontend,
 		FrontendFiles:  frontendFiles,
 	})
@@ -223,11 +257,11 @@ func parseFlags(args []string) map[string]string {
 	return flags
 }
 
-// getFilesForCommit runs git show in the current directory.
-func getFilesForCommit(commitHash string) ([]string, error) {
+// getFilesForCommit runs git show in the given workDir (empty = cwd).
+func getFilesForCommit(commitHash, workDir string) ([]string, error) {
 	_, err := exec.LookPath("git")
 	if err != nil {
 		return nil, fmt.Errorf("git no encontrado en el sistema")
 	}
-	return git.GetChangedFiles(commitHash)
+	return git.GetChangedFiles(commitHash, workDir)
 }

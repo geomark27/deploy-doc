@@ -3,6 +3,7 @@ package git
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -14,8 +15,12 @@ type CommitFiles struct {
 }
 
 // GetChangedFiles runs git show --name-only and returns the list of changed files.
-func GetChangedFiles(commitHash string) ([]string, error) {
+// workDir sets the working directory for git; empty string uses the current directory.
+func GetChangedFiles(commitHash, workDir string) ([]string, error) {
 	cmd := exec.Command("git", "show", "--name-only", "--format=", commitHash)
+	if workDir != "" {
+		cmd.Dir = filepath.Clean(workDir)
+	}
 	out, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {

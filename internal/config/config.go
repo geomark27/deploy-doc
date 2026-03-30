@@ -1,19 +1,29 @@
 package config
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+
+	"gopkg.in/yaml.v3"
 )
+
+// ProjectConfig holds the local paths and repo names for a project.
+type ProjectConfig struct {
+	BackendPath  string `yaml:"backend_path,omitempty"`
+	BackendRepo  string `yaml:"backend_repo,omitempty"`
+	FrontendPath string `yaml:"frontend_path,omitempty"`
+	FrontendRepo string `yaml:"frontend_repo,omitempty"`
+}
 
 // Config holds all configuration needed by the CLI.
 // Priority: env vars > ~/.config/deploy-doc/config.yaml
 type Config struct {
-	AtlassianEmail string
-	AtlassianToken string
-	BaseURL        string
+	AtlassianEmail string                    `yaml:"atlassian_email"`
+	AtlassianToken string                    `yaml:"atlassian_token"`
+	BaseURL        string                    `yaml:"base_url"`
+	DefaultProject string                    `yaml:"default_project,omitempty"`
+	Projects       map[string]*ProjectConfig `yaml:"projects,omitempty"`
 }
 
 // Load loads config following priority: env vars > config file.
@@ -36,6 +46,12 @@ func Load() (*Config, error) {
 			if cfg.BaseURL == "" {
 				cfg.BaseURL = fileCfg.BaseURL
 			}
+			if cfg.DefaultProject == "" {
+				cfg.DefaultProject = fileCfg.DefaultProject
+			}
+			if cfg.Projects == nil {
+				cfg.Projects = fileCfg.Projects
+			}
 		}
 	}
 
@@ -44,6 +60,25 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// GetProject resolves which project to use.
+// Priority: explicit name > default_project > nil (no project configured).
+func (c *Config) GetProject(name string) (*ProjectConfig, string, error) {
+	if name != "" {
+		proj, ok := c.Projects[name]
+		if !ok {
+			return nil, "", fmt.Errorf("proyecto '%s' no encontrado. Usa: deploy-doc project list", name)
+		}
+		return proj, name, nil
+	}
+	if c.DefaultProject != "" && c.Projects != nil {
+		proj, ok := c.Projects[c.DefaultProject]
+		if ok {
+			return proj, c.DefaultProject, nil
+		}
+	}
+	return nil, "", nil
 }
 
 // ConfigPath returns the path to the config file.
@@ -55,46 +90,26 @@ func ConfigPath() (string, error) {
 	return filepath.Join(home, ".config", "deploy-doc", "config.yaml"), nil
 }
 
-// loadFromFile reads the config file (simple key: value format).
+// loadFromFile reads and unmarshals the config file.
 func loadFromFile() (*Config, error) {
 	path, err := ConfigPath()
 	if err != nil {
 		return nil, err
 	}
 
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
 
 	cfg := &Config{}
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		parts := strings.SplitN(line, ":", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
-
-		switch key {
-		case "atlassian_email":
-			cfg.AtlassianEmail = val
-		case "atlassian_token":
-			cfg.AtlassianToken = val
-		case "base_url":
-			cfg.BaseURL = val
-		}
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return nil, err
 	}
-	return cfg, scanner.Err()
+	return cfg, nil
 }
 
-// Save writes the config to the config file.
+// Save marshals and writes the config to disk with restricted permissions.
 func Save(cfg *Config) error {
 	path, err := ConfigPath()
 	if err != nil {
@@ -105,10 +120,11 @@ func Save(cfg *Config) error {
 		return err
 	}
 
-	content := fmt.Sprintf(
-		"atlassian_email: %s\natlassian_token: %s\nbase_url: %s\n",
-		cfg.AtlassianEmail, cfg.AtlassianToken, cfg.BaseURL,
-	)
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+
 	// 0600 = solo el usuario puede leer/escribir
-	return os.WriteFile(path, []byte(content), 0600)
+	return os.WriteFile(path, data, 0600)
 }

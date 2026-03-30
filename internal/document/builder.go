@@ -32,13 +32,13 @@ func Build(doc DeployDoc) map[string]any {
 	// Frontend table (only if there are frontend files)
 	if len(doc.FrontendFiles) > 0 {
 		content = append(content, heading(3, "Proyectos y formularios - Frontend:"))
-		content = append(content, filesTable(doc.FrontendRepo, "echo-logistics", doc.FrontendCommit, doc.FrontendFiles))
+		content = append(content, filesTable(doc.FrontendRepo, doc.FrontendRepo, doc.FrontendCommit, doc.FrontendFiles))
 	}
 
 	// Backend table (only if there are backend files)
 	if len(doc.BackendFiles) > 0 {
 		content = append(content, heading(3, "Proyectos y formularios - Backend:"))
-		content = append(content, filesTable(doc.BackendRepo, "operativo-api", doc.BackendCommit, doc.BackendFiles))
+		content = append(content, filesTable(doc.BackendRepo, doc.BackendRepo, doc.BackendCommit, doc.BackendFiles))
 	}
 
 	// A considerar section
