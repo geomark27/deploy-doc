@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -92,49 +91,4 @@ func copyFile(src, dst string) error {
 		return os.Chmod(dst, 0755)
 	}
 	return nil
-}
-
-func addToPath(dir string) error {
-	if runtime.GOOS == "windows" {
-		return addToPathWindows(dir)
-	}
-	return addToPathUnix(dir)
-}
-
-func addToPathWindows(dir string) error {
-	script := fmt.Sprintf(`
-$current = [Environment]::GetEnvironmentVariable("PATH", "User")
-if ($current -notlike "*%s*") {
-    [Environment]::SetEnvironmentVariable("PATH", "$current;%s", "User")
-}
-`, dir, dir)
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func addToPathUnix(dir string) error {
-	home, _ := os.UserHomeDir()
-
-	shell := os.Getenv("SHELL")
-	var rcFile string
-	if strings.Contains(shell, "zsh") {
-		rcFile = filepath.Join(home, ".zshrc")
-	} else {
-		rcFile = filepath.Join(home, ".bashrc")
-	}
-
-	content, _ := os.ReadFile(rcFile)
-	if strings.Contains(string(content), dir) {
-		return nil
-	}
-
-	f, err := os.OpenFile(rcFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = fmt.Fprintf(f, "\n# deploy-doc\nexport PATH=\"$PATH:%s\"\n", dir)
-	return err
 }

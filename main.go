@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/geomark27/deploy-doc/cmd"
 	"github.com/geomark27/deploy-doc/internal/build"
@@ -13,14 +14,31 @@ import (
 )
 
 func main() {
-	if !installer.IsInstalled() {
-		fmt.Println("Instalando deploy-doc...")
-		fmt.Printf("Destino: %s\n\n", installer.InstallDir())
+	reader := bufio.NewReader(os.Stdin)
 
+	if !installer.IsInstalled() {
+		fmt.Println("deploy-doc no está instalado en este sistema.")
+		fmt.Printf("Destino: %s\n\n", installer.InstallDir())
+		fmt.Println("La instalación realizará las siguientes acciones:")
+		fmt.Println("  1. Copiar el ejecutable al directorio de destino")
+		fmt.Println("  2. Agregar ese directorio al PATH del usuario")
+		fmt.Println()
+		fmt.Print("¿Deseas instalar deploy-doc ahora? [S/n]: ")
+
+		ans, _ := reader.ReadString('\n')
+		ans = strings.TrimSpace(strings.ToLower(ans))
+		if ans != "" && ans != "s" && ans != "si" && ans != "sí" {
+			fmt.Println("Instalación cancelada.")
+			fmt.Printf("\nPuedes instalarlo manualmente copiando el ejecutable a una carpeta en tu PATH.\n")
+			pause(reader)
+			os.Exit(0)
+		}
+
+		fmt.Println()
 		if err := installer.Run(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error durante la instalacion: %v\n\n", err)
 			fmt.Println("Puedes instalarlo manualmente copiando el ejecutable a una carpeta en tu PATH.")
-			pause()
+			pause(reader)
 			os.Exit(1)
 		}
 
@@ -33,7 +51,7 @@ func main() {
 		fmt.Println()
 
 		if runtime.GOOS == "windows" {
-			fmt.Println("  Cierra y vuelve a abrir PowerShell, luego ejecuta:")
+			fmt.Println("  Cierra y vuelve a abrir la terminal, luego ejecuta:")
 		} else {
 			fmt.Println("  Abre una nueva terminal o ejecuta:")
 			fmt.Println("    source ~/.zshrc   (zsh)")
@@ -45,7 +63,7 @@ func main() {
 		fmt.Println()
 		fmt.Println("    deploy-doc init")
 		fmt.Println()
-		pause()
+		pause(reader)
 		os.Exit(0)
 	}
 
@@ -89,8 +107,7 @@ func shouldCheckUpdate() bool {
 	return true
 }
 
-func pause() {
+func pause(r *bufio.Reader) {
 	fmt.Print("\nPresiona Enter para cerrar...")
-	reader := bufio.NewReader(os.Stdin)
-	reader.ReadString('\n') //nolint
+	r.ReadString('\n') //nolint
 }

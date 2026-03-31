@@ -74,16 +74,16 @@ help:
 build:
 	@echo "$(YELLOW)Compilando...$(NC)"
 	@mkdir -p $(BUILD_DIR)
-	@go build -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN)
+	@go build -trimpath -ldflags "-s -w" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN)
 	@echo "$(GREEN)✓ Binario generado en $(BUILD_DIR)/$(BINARY_NAME)$(NC)"
 
 .PHONY: build-all
 build-all:
 	@echo "$(YELLOW)Compilando para todos los sistemas operativos...$(NC)"
 	@mkdir -p $(BUILD_DIR)
-	@GOOS=linux   GOARCH=amd64 go build -ldflags "-X $(VERSION_PKG).Version=$(VER)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN)
-	@GOOS=windows GOARCH=amd64 go build -ldflags "-X $(VERSION_PKG).Version=$(VER)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN)
-	@GOOS=darwin  GOARCH=amd64 go build -ldflags "-X $(VERSION_PKG).Version=$(VER)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN)
+	@GOOS=linux   GOARCH=amd64 go build -trimpath -ldflags "-s -w -X $(VERSION_PKG).Version=$(VER)" -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN)
+	@GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X $(VERSION_PKG).Version=$(VER)" -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN)
+	@GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags "-s -w -X $(VERSION_PKG).Version=$(VER)" -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN)
 	@echo "$(GREEN)✓ Binarios generados en $(BUILD_DIR)/$(NC)"
 
 # ----------------------------------------------------------------
