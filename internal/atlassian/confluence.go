@@ -46,11 +46,15 @@ type pageResponse struct {
 	} `json:"_links"`
 }
 
+// deployDocSearchLimit is the max number of recent deploy docs shown when
+// asking the user where to place a new document.
+const deployDocSearchLimit = 10
+
 // FindLastDeployDoc finds the last deploy document created by the authenticated user
 // searching by title pattern "Documento de Despliegue".
 func (c *Client) FindLastDeployDoc() ([]Page, error) {
 	cql := url.QueryEscape(`title ~ "Documento de Despliegue" AND creator = currentUser() ORDER BY created DESC`)
-	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=5", cql)
+	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=%d", cql, deployDocSearchLimit)
 
 	body, err := c.Get(path)
 	if err != nil {

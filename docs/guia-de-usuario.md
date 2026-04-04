@@ -82,7 +82,8 @@ Se te pedirá:
 |---|---|
 | `Atlassian email` | El correo con el que ingresas a Atlassian |
 | `Atlassian API token` | Token generado en tu perfil de seguridad |
-| `Base URL` | URL base de tu instancia (por defecto: `https://torresytorres.atlassian.net`) |
+
+> Si ya existe una configuración guardada, el comando preguntará si deseas sobreescribirla antes de continuar. Los proyectos configurados se conservan siempre.
 
 Al finalizar, `init` te ofrecerá configurar tu primer **proyecto** (ver sección [Proyectos](#proyectos)).
 
@@ -126,12 +127,12 @@ Con proyectos configurados, el CLI sabe exactamente dónde están tus repositori
 
 ### Estructura de un proyecto
 
-| Campo | Descripción | Requerido |
-|---|---|---|
-| `backend_path` | Ruta absoluta al repositorio de backend en tu máquina | No |
-| `backend_repo` | Nombre del repositorio en Bitbucket (para los links del documento) | No |
-| `frontend_path` | Ruta absoluta al repositorio de frontend en tu máquina | No |
-| `frontend_repo` | Nombre del repositorio en Bitbucket (para los links del documento) | No |
+| Campo | Descripción |
+|---|---|
+| `backend_path` | Ruta absoluta al repositorio de backend en tu máquina |
+| `backend_repo` | Nombre del repositorio en Bitbucket |
+| `frontend_path` | Ruta absoluta al repositorio de frontend en tu máquina |
+| `frontend_repo` | Nombre del repositorio en Bitbucket |
 
 Un proyecto puede tener solo backend, solo frontend, o ambos.
 
@@ -160,7 +161,7 @@ Configura o actualiza las credenciales de Atlassian y opcionalmente configura un
 deploy-doc init
 ```
 
-No recibe flags. Es un asistente interactivo que guía campo por campo. Si ya tenías credenciales guardadas, las sobreescribe conservando los proyectos existentes.
+No recibe flags. Es un asistente interactivo que guía campo por campo. Si ya existe una configuración guardada, pregunta si deseas sobreescribirla (`[s/N]`, por defecto No). Los proyectos configurados se conservan siempre.
 
 ---
 
@@ -177,11 +178,12 @@ deploy-doc generate --issue <ISSUE_KEY> [--commit-backend <HASH>] [--commit-fron
 | Flag | Requerido | Descripción |
 |---|---|---|
 | `--issue` | Sí | Clave del issue en Jira (ej: `APP-1999`) |
-| `--commit-backend` | Condicional* | Hash del commit en el repositorio backend |
-| `--commit-frontend` | Condicional* | Hash del commit en el repositorio frontend |
+| `--commit-backend` | Condicional* | Hash(es) del commit de backend. Acepta varios separados por coma |
+| `--commit-frontend` | Condicional* | Hash(es) del commit de frontend. Acepta varios separados por coma |
 | `--project` | No | Nombre del proyecto a usar. Si se omite, usa el `default_project` |
+| `--dry-run` | No | Imprime el documento ADF en stdout sin crear nada en Confluence |
 
-> *Al menos uno de los dos commits es requerido.
+> *Al menos uno de los dos commits es requerido. Los flags aceptan tanto `--flag valor` como `--flag=valor`.
 
 **Comportamiento con proyectos:**
 
@@ -202,7 +204,13 @@ deploy-doc generate --project ecuapass --issue ECU-123 --commit-backend abc1234
 # Frontend y backend con proyecto por defecto
 deploy-doc generate --issue APP-1999 --commit-backend 27cefd86 --commit-frontend 5bd0cea0
 
-# Sin proyectos configurados (comportamiento anterior, desde el repo actual)
+# Múltiples commits (separados por coma)
+deploy-doc generate --issue APP-1999 --commit-backend abc123,def456
+
+# Vista previa del documento sin publicar en Confluence
+deploy-doc generate --issue APP-1999 --commit-backend 27cefd86 --dry-run
+
+# Sin proyectos configurados (git corre en el directorio actual)
 deploy-doc generate --issue APP-1999 --commit-backend 27cefd86
 ```
 
@@ -217,9 +225,9 @@ deploy-doc generate --issue APP-1999 --commit-backend 27cefd86
      [2] Crear uno nuevo de todas formas
      [3] Cancelar
      ```
-4. Lee los archivos modificados en cada commit (usando las rutas del proyecto si están configuradas)
+4. Lee los archivos modificados en cada commit (usando las rutas del proyecto si están configuradas). Soporta múltiples commits por servicio
 5. Si un commit falla pero el otro tiene éxito, continúa con la información disponible
-6. Muestra tus últimos documentos de despliegue para elegir la ubicación en Confluence
+6. Muestra tus últimos documentos de despliegue para elegir la ubicación en Confluence (hasta 10 opciones)
 7. Pide confirmación antes de crear o actualizar
 8. Crea o actualiza la página y muestra la URL resultante
 

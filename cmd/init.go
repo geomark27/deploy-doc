@@ -10,11 +10,25 @@ import (
 )
 
 func runInit(args []string) error {
+	reader := bufio.NewReader(os.Stdin)
+
+	// Warn if config already exists before overwriting
+	if path, err := config.ConfigPath(); err == nil {
+		if _, statErr := os.Stat(path); statErr == nil {
+			fmt.Printf("\nYa existe una configuración en %s\n", path)
+			fmt.Print("¿Sobreescribir? [s/N]: ")
+			answer, _ := reader.ReadString('\n')
+			answer = strings.TrimSpace(strings.ToLower(answer))
+			if answer != "s" && answer != "si" && answer != "sí" {
+				fmt.Println("Cancelado. Configuración sin cambios.")
+				return nil
+			}
+		}
+	}
+
 	fmt.Println("=== Configuración de deploy-doc ===")
 	fmt.Println("Tus credenciales se guardarán en ~/.config/deploy-doc/config.yaml")
 	fmt.Println()
-
-	reader := bufio.NewReader(os.Stdin)
 
 	email, err := prompt(reader, "Atlassian email")
 	if err != nil {
@@ -26,18 +40,13 @@ func runInit(args []string) error {
 		return err
 	}
 
-	baseURL, err := promptWithDefault(reader, "Base URL", "https://torresytorres.atlassian.net")
-	if err != nil {
-		return err
-	}
-
 	// Load existing config to preserve projects if any
 	existing, _ := config.Load()
 
 	cfg := &config.Config{
 		AtlassianEmail: email,
 		AtlassianToken: token,
-		BaseURL:        baseURL,
+		BaseURL:        "https://torresytorres.atlassian.net",
 	}
 	if existing != nil {
 		cfg.DefaultProject = existing.DefaultProject

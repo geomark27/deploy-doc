@@ -32,13 +32,13 @@ func Build(doc DeployDoc) map[string]any {
 	// Frontend table (only if there are frontend files)
 	if len(doc.FrontendFiles) > 0 {
 		content = append(content, heading(3, "Proyectos y formularios - Frontend:"))
-		content = append(content, filesTable(doc.FrontendRepo, doc.FrontendRepo, doc.FrontendCommit, doc.FrontendFiles))
+		content = append(content, filesTable(doc.FrontendRepo, doc.FrontendCommit, doc.FrontendFiles))
 	}
 
 	// Backend table (only if there are backend files)
 	if len(doc.BackendFiles) > 0 {
 		content = append(content, heading(3, "Proyectos y formularios - Backend:"))
-		content = append(content, filesTable(doc.BackendRepo, doc.BackendRepo, doc.BackendCommit, doc.BackendFiles))
+		content = append(content, filesTable(doc.BackendRepo, doc.BackendCommit, doc.BackendFiles))
 	}
 
 	// A considerar section
@@ -81,7 +81,7 @@ func headerTable(issueKey, issueURL string) map[string]any {
 }
 
 // filesTable builds the files table for frontend or backend.
-func filesTable(repoName, appName, commitHash string, files map[string][]string) map[string]any {
+func filesTable(repoName, commitHash string, files map[string][]string) map[string]any {
 	rows := []any{
 		// Header row
 		tableRow([]any{
@@ -128,7 +128,7 @@ func filesTable(repoName, appName, commitHash string, files map[string][]string)
 
 		rows = append(rows, tableRow([]any{
 			serverCell,
-			tableCell(175, textNode(appName)),
+			tableCell(175, textNode(repoName)),
 			tableCell(176, textNode(dir)),
 			tableCellWithList(188, fileItems),
 			tableCellWithList(152, linkItems),

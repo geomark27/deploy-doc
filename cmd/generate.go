@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -22,6 +23,7 @@ func runGenerate(args []string) error {
 	commitBackend := flags["--commit-backend"]
 	commitFrontend := flags["--commit-frontend"]
 	projectName := flags["--project"]
+	_, dryRun := flags["--dry-run"]
 
 	if issue == "" {
 		return fmt.Errorf("--issue es requerido. Ej: deploy-doc generate --issue APP-1999")
@@ -29,6 +31,9 @@ func runGenerate(args []string) error {
 	if commitBackend == "" && commitFrontend == "" {
 		return fmt.Errorf("debes proveer al menos --commit-backend o --commit-frontend")
 	}
+
+	backendHashes := splitHashes(commitBackend)
+	frontendHashes := splitHashes(commitFrontend)
 
 	// --- Load config ---
 	cfg, err := config.Load()
@@ -42,7 +47,7 @@ func runGenerate(args []string) error {
 		return err
 	}
 
-	// Determine workDirs and repo names from project (or fallback defaults)
+	// Determine workDirs, repo names, and bitbucket org from project (or fallback defaults)
 	var backendWorkDir, frontendWorkDir string
 	backendRepo := "operativo-api"
 	frontendRepo := "echo-logistics"
@@ -62,10 +67,10 @@ func runGenerate(args []string) error {
 	}
 
 	// Warn if commit provided but no path configured for that side
-	if commitBackend != "" && proj != nil && proj.BackendPath == "" {
+	if len(backendHashes) > 0 && proj != nil && proj.BackendPath == "" {
 		fmt.Println("Advertencia: el proyecto no tiene backend_path configurado. Git correra en el directorio actual.")
 	}
-	if commitFrontend != "" && proj != nil && proj.FrontendPath == "" {
+	if len(frontendHashes) > 0 && proj != nil && proj.FrontendPath == "" {
 		fmt.Println("Advertencia: el proyecto no tiene frontend_path configurado. Git correra en el directorio actual.")
 	}
 
@@ -110,9 +115,10 @@ func runGenerate(args []string) error {
 	var backendFiles, frontendFiles map[string][]string
 	var commitErrors []string
 
-	if commitBackend != "" {
-		fmt.Printf("Leyendo commit backend %s...\n", commitBackend)
-		files, err := getFilesForCommit(commitBackend, backendWorkDir)
+	if len(backendHashes) > 0 {
+		label := strings.Join(backendHashes, ", ")
+		fmt.Printf("Leyendo commits backend [%s]...\n", label)
+		files, err := getFilesForCommits(backendHashes, backendWorkDir)
 		if err != nil {
 			fmt.Printf("✗ Backend: %v\n\n", err)
 			commitErrors = append(commitErrors, fmt.Sprintf("backend: %v", err))
@@ -122,9 +128,10 @@ func runGenerate(args []string) error {
 		}
 	}
 
-	if commitFrontend != "" {
-		fmt.Printf("Leyendo commit frontend %s...\n", commitFrontend)
-		files, err := getFilesForCommit(commitFrontend, frontendWorkDir)
+	if len(frontendHashes) > 0 {
+		label := strings.Join(frontendHashes, ", ")
+		fmt.Printf("Leyendo commits frontend [%s]...\n", label)
+		files, err := getFilesForCommits(frontendHashes, frontendWorkDir)
 		if err != nil {
 			fmt.Printf("✗ Frontend: %v\n\n", err)
 			commitErrors = append(commitErrors, fmt.Sprintf("frontend: %v", err))
@@ -152,12 +159,23 @@ func runGenerate(args []string) error {
 		IssueSummary:   jiraIssue.Summary,
 		IssueURL:       jiraIssue.URL,
 		BackendRepo:    backendRepo,
-		BackendCommit:  commitBackend,
+		BackendCommit:  firstHash(backendHashes),
 		BackendFiles:   backendFiles,
 		FrontendRepo:   frontendRepo,
-		FrontendCommit: commitFrontend,
+		FrontendCommit: firstHash(frontendHashes),
 		FrontendFiles:  frontendFiles,
 	})
+
+	// --- Dry run: print ADF JSON and exit ---
+	if dryRun {
+		fmt.Printf("Título: %s\n\n", title)
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(adf); err != nil {
+			return fmt.Errorf("error serializando ADF: %w", err)
+		}
+		return nil
+	}
 
 	// --- Update existing page ---
 	if updateExisting {
@@ -245,23 +263,63 @@ func runGenerate(args []string) error {
 	return nil
 }
 
-// parseFlags parses --key value style args into a map.
+// firstHash returns the first element of a slice, or "" if empty.
+func firstHash(hashes []string) string {
+	if len(hashes) == 0 {
+		return ""
+	}
+	return hashes[0]
+}
+
+// splitHashes splits a comma-separated string of commit hashes into a slice.
+// Empty entries are ignored.
+func splitHashes(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if h := strings.TrimSpace(p); h != "" {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// parseFlags parses --key value and --key=value style args into a map.
+// Boolean flags (no value) are stored with an empty string value.
 func parseFlags(args []string) map[string]string {
 	flags := make(map[string]string)
-	for i := 0; i < len(args)-1; i++ {
-		if strings.HasPrefix(args[i], "--") {
-			flags[args[i]] = args[i+1]
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+		if !strings.HasPrefix(arg, "--") {
+			i++
+			continue
+		}
+		if idx := strings.IndexByte(arg, '='); idx != -1 {
+			// --flag=value form
+			flags[arg[:idx]] = arg[idx+1:]
+			i++
+		} else if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+			// --flag value form
+			flags[arg] = args[i+1]
+			i += 2
+		} else {
+			// boolean flag with no value
+			flags[arg] = ""
 			i++
 		}
 	}
 	return flags
 }
 
-// getFilesForCommit runs git show in the given workDir (empty = cwd).
-func getFilesForCommit(commitHash, workDir string) ([]string, error) {
+// getFilesForCommits runs git show for one or more commits in the given workDir.
+func getFilesForCommits(hashes []string, workDir string) ([]string, error) {
 	_, err := exec.LookPath("git")
 	if err != nil {
 		return nil, fmt.Errorf("git no encontrado en el sistema")
 	}
-	return git.GetChangedFiles(commitHash, workDir)
+	return git.GetChangedFilesMulti(hashes, workDir)
 }

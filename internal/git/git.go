@@ -45,6 +45,26 @@ func GetChangedFiles(commitHash, workDir string) ([]string, error) {
 	return files, nil
 }
 
+// GetChangedFilesMulti returns the union of changed files across multiple commits.
+// Duplicate file paths are deduplicated; order of first appearance is preserved.
+func GetChangedFilesMulti(hashes []string, workDir string) ([]string, error) {
+	seen := make(map[string]bool)
+	var all []string
+	for _, h := range hashes {
+		files, err := GetChangedFiles(h, workDir)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			if !seen[f] {
+				seen[f] = true
+				all = append(all, f)
+			}
+		}
+	}
+	return all, nil
+}
+
 // GroupByDirectory agrupa los archivos por su directorio padre,
 // útil para construir las filas de la tabla del documento.
 func GroupByDirectory(files []string) map[string][]string {
