@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -46,11 +48,49 @@ func CheckLatest(current string) (string, error) {
 		return "", nil
 	}
 
+	if !isNewer(r.TagName, current) {
+		return "", nil
+	}
+
 	return r.TagName, nil
 }
 
+// isNewer returns true only if candidate is strictly greater than base.
+// Both must be in "vMAJOR.MINOR.PATCH" format; any parse failure returns false.
+func isNewer(candidate, base string) bool {
+	parse := func(v string) (int, int, int, bool) {
+		v = strings.TrimPrefix(v, "v")
+		parts := strings.SplitN(v, ".", 3)
+		if len(parts) != 3 {
+			return 0, 0, 0, false
+		}
+		major, err1 := strconv.Atoi(parts[0])
+		minor, err2 := strconv.Atoi(parts[1])
+		patch, err3 := strconv.Atoi(parts[2])
+		if err1 != nil || err2 != nil || err3 != nil {
+			return 0, 0, 0, false
+		}
+		return major, minor, patch, true
+	}
+
+	cMaj, cMin, cPat, ok1 := parse(candidate)
+	bMaj, bMin, bPat, ok2 := parse(base)
+	if !ok1 || !ok2 {
+		return false
+	}
+
+	if cMaj != bMaj {
+		return cMaj > bMaj
+	}
+	if cMin != bMin {
+		return cMin > bMin
+	}
+	return cPat > bPat
+}
+
 // SelfUpdate downloads the given version and replaces the running binary.
-func SelfUpdate(latest string) error {
+// Returns migrated=true when the binary was renamed from deploy-doc → gtt.
+func SelfUpdate(latest string) (migrated bool, err error) {
 	url := fmt.Sprintf(
 		"https://github.com/%s/releases/download/%s/%s",
 		repo, latest, assetName(),
@@ -59,25 +99,24 @@ func SelfUpdate(latest string) error {
 	fmt.Printf("Descargando %s...\n", latest)
 	resp, err := http.Get(url) //nolint:noctx
 	if err != nil {
-		return fmt.Errorf("error descargando: %w", err)
+		return false, fmt.Errorf("error descargando: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("error HTTP %d al descargar el binario", resp.StatusCode)
+		return false, fmt.Errorf("error HTTP %d al descargar el binario", resp.StatusCode)
 	}
 
 	exe, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("no se pudo determinar la ruta del ejecutable: %w", err)
+		return false, fmt.Errorf("no se pudo determinar la ruta del ejecutable: %w", err)
 	}
 	exe, _ = filepath.EvalSymlinks(exe)
 
-	// Write to a temp file in the same directory
 	dir := filepath.Dir(exe)
-	tmp, err := os.CreateTemp(dir, "deploy-doc-update-*")
+	tmp, err := os.CreateTemp(dir, "gtt-update-*")
 	if err != nil {
-		return fmt.Errorf("no se pudo crear archivo temporal: %w", err)
+		return false, fmt.Errorf("no se pudo crear archivo temporal: %w", err)
 	}
 	tmpName := tmp.Name()
 
@@ -85,35 +124,66 @@ func SelfUpdate(latest string) error {
 	tmp.Close()
 	if copyErr != nil {
 		os.Remove(tmpName)
-		return fmt.Errorf("error escribiendo binario: %w", copyErr)
+		return false, fmt.Errorf("error escribiendo binario: %w", copyErr)
 	}
 
 	if runtime.GOOS != "windows" {
 		if err := os.Chmod(tmpName, 0755); err != nil {
 			os.Remove(tmpName)
-			return err
+			return false, err
 		}
 	}
 
-	// On Windows rename the running exe first (can't overwrite a running file)
+	// Migration: if running as "deploy-doc" / "deploy-doc.exe", install as
+	// "gtt" / "gtt.exe" in the same directory and remove the old binary.
+	baseName := filepath.Base(exe)
+	isLegacy := baseName == "deploy-doc" || baseName == "deploy-doc.exe"
+
+	if isLegacy {
+		newName := "gtt"
+		if runtime.GOOS == "windows" {
+			newName = "gtt.exe"
+		}
+		newExe := filepath.Join(dir, newName)
+
+		if err := os.Rename(tmpName, newExe); err != nil {
+			os.Remove(tmpName)
+			return false, fmt.Errorf("no se pudo instalar gtt: %w", err)
+		}
+
+		if runtime.GOOS == "windows" {
+			// Can't delete a running exe on Windows; rename to .old for
+			// deferred cleanup on the next gtt run.
+			oldBak := exe + ".old"
+			os.Remove(oldBak)
+			os.Rename(exe, oldBak) //nolint:errcheck
+		} else {
+			os.Remove(exe)
+		}
+
+		return true, nil
+	}
+
+	// Normal in-place update (already running as gtt).
 	if runtime.GOOS == "windows" {
 		oldName := exe + ".old"
 		os.Remove(oldName)
 		if err := os.Rename(exe, oldName); err != nil {
 			os.Remove(tmpName)
-			return fmt.Errorf("no se pudo renombrar el ejecutable actual: %w", err)
+			return false, fmt.Errorf("no se pudo renombrar el ejecutable actual: %w", err)
 		}
 	}
 
 	if err := os.Rename(tmpName, exe); err != nil {
 		os.Remove(tmpName)
-		return fmt.Errorf("no se pudo reemplazar el ejecutable: %w", err)
+		return false, fmt.Errorf("no se pudo reemplazar el ejecutable: %w", err)
 	}
 
-	return nil
+	return false, nil
 }
 
-// CleanOldBinary removes the .old backup left on Windows after an update.
+// CleanOldBinary removes .old backups left on Windows after an update.
+// Handles both "gtt.exe.old" (normal update) and "deploy-doc.exe.old" (migration).
 func CleanOldBinary() {
 	if runtime.GOOS != "windows" {
 		return
@@ -124,15 +194,18 @@ func CleanOldBinary() {
 	}
 	exe, _ = filepath.EvalSymlinks(exe)
 	os.Remove(exe + ".old")
+	// Clean up legacy backup left by the deploy-doc → gtt migration.
+	dir := filepath.Dir(exe)
+	os.Remove(filepath.Join(dir, "deploy-doc.exe.old"))
 }
 
 func assetName() string {
 	switch runtime.GOOS {
 	case "windows":
-		return "deploy-doc-windows-amd64.exe"
+		return "gtt-windows-amd64.exe"
 	case "darwin":
-		return "deploy-doc-darwin-amd64"
+		return "gtt-darwin-amd64"
 	default:
-		return "deploy-doc-linux-amd64"
+		return "gtt-linux-amd64"
 	}
 }

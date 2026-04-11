@@ -26,7 +26,7 @@ func runInit(args []string) error {
 		}
 	}
 
-	fmt.Println("=== Configuración de deploy-doc ===")
+	fmt.Println(clCyan + clBold + "── Configuración de gtt ──" + clReset)
 	fmt.Println("Tus credenciales se guardarán en ~/.config/deploy-doc/config.yaml")
 	fmt.Println()
 
@@ -58,7 +58,7 @@ func runInit(args []string) error {
 	}
 
 	path, _ := config.ConfigPath()
-	fmt.Printf("\n✓ Configuración guardada en %s\n", path)
+	fmt.Printf("\n"+clGreen+"✓"+clReset+" Configuración guardada en %s\n", path)
 
 	// --- Optional: configure first project ---
 	fmt.Println()
@@ -72,14 +72,14 @@ func runInit(args []string) error {
 	}
 
 	fmt.Println()
-	fmt.Println("Ya puedes usar: deploy-doc generate --issue APP-XXXX ...")
+	fmt.Println(clGreen + "✓ Listo!" + clReset + " Ya puedes usar: " + clBold + "gtt g -i APP-XXXX ..." + clReset)
 	return nil
 }
 
 // configureProject runs the interactive project setup and saves to cfg.
 func configureProject(reader *bufio.Reader, cfg *config.Config) error {
 	fmt.Println()
-	fmt.Println("--- Configuración de proyecto ---")
+	fmt.Println(clCyan + clBold + "── Configuración de proyecto ──" + clReset)
 
 	name, err := prompt(reader, "Nombre del proyecto (ej: echo)")
 	if err != nil {
@@ -131,7 +131,7 @@ func configureProject(reader *bufio.Reader, cfg *config.Config) error {
 		return fmt.Errorf("error guardando proyecto: %w", err)
 	}
 
-	fmt.Printf("✓ Proyecto '%s' configurado\n", name)
+	fmt.Printf(clGreen+"✓"+clReset+" Proyecto '%s' configurado\n", name)
 	return nil
 }
 

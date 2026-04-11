@@ -1,4 +1,4 @@
-# Arquitectura técnica — deploy-doc
+# Arquitectura técnica — gtt
 
 > Para desarrolladores y agentes IA. Describe el diseño interno del proyecto.
 
@@ -8,6 +8,8 @@
 
 CLI en Go que automatiza la creación de documentos de despliegue en Confluence. Orquesta tres fuentes: **Jira** (título del issue), **Git** (archivos modificados en un commit), y **Confluence** (creación/actualización de la página en formato ADF).
 
+El binario se llama `gtt`. El módulo Go y el repo de GitHub mantienen el nombre original `deploy-doc` — solo el ejecutable distribuido cambió.
+
 ---
 
 ## Estructura de paquetes
@@ -16,11 +18,11 @@ CLI en Go que automatiza la creación de documentos de despliegue en Confluence.
 deploy-doc/
 ├── main.go                        # Entry point: self-installer → update check → cmd.Execute()
 ├── cmd/
-│   ├── root.go                    # Router manual: map[string]func([]string)error
-│   ├── init.go                    # Comando: deploy-doc init (interactivo)
-│   ├── generate.go                # Comando: deploy-doc generate (flujo principal)
-│   ├── project.go                 # Comando: deploy-doc project (list/add/default/remove)
-│   └── update.go                  # Comando: deploy-doc update (auto-actualización)
+│   ├── root.go                    # Router + constantes de color ANSI + helpers stepLabel/okLine/warnLine/errLine
+│   ├── init.go                    # Comando: gtt init (interactivo)
+│   ├── generate.go                # Comando: gtt g|gen|generate (flujo principal)
+│   ├── project.go                 # Comando: gtt project (list|ls/add/default/remove)
+│   └── update.go                  # Comando: gtt update (auto-actualización)
 ├── internal/
 │   ├── build/
 │   │   └── version.go             # var Version = "dev" (sobreescrita por ldflags)
@@ -44,10 +46,10 @@ deploy-doc/
 
 ---
 
-## Flujo de datos — `deploy-doc generate`
+## Flujo de datos — `gtt g`
 
 ```
-flags (args)
+flags (args)  — acepta -i/-b/-f/-p (cortos) y --issue/--commit-backend/etc. (largos)
     │
     ▼
 config.Load()          env vars > ~/.config/deploy-doc/config.yaml
@@ -94,7 +96,7 @@ type ProjectConfig struct {
 
 **Prioridad de carga:** env vars (`ATLASSIAN_EMAIL`, `ATLASSIAN_TOKEN`, `ATLASSIAN_BASE_URL`) → archivo YAML.
 
-**Resolución de proyecto en `generate`:** flag `--project` > `DefaultProject` > defaults hardcodeados (`operativo-api` / `echo-logistics` / `devtyt`).
+**Resolución de proyecto en `generate`:** flag `--project` / `-p` > `DefaultProject` > defaults hardcodeados (`operativo-api` / `echo-logistics` / `devtyt`).
 
 **Formato del archivo:** YAML via `gopkg.in/yaml.v3`. Ruta: `~/.config/deploy-doc/config.yaml`, permisos `0600`.
 
@@ -145,9 +147,15 @@ La versión se embebe en el binario vía ldflags:
 -X github.com/geomark27/deploy-doc/internal/build.Version=vX.Y.Z
 ```
 
-Variable: `internal/build.Version`, fallback `"dev"` en desarrollo (`make run`).
+Variable: `internal/build.Version`, fallback `"dev"` en `make run`.
 
-Targets de release en Makefile: `make release` (patch), `make release-minor`, `make release-major`. Cada uno: lint → `build-all` con VER → git tag → push → `gh release create`.
+`make build` / `make install` usan `git describe --tags --abbrev=0` para obtener la versión automáticamente. `make build-all` (usado por `make release`) recibe el tag nuevo como `VER=$$NEW_TAG`.
+
+Targets de release: `make release` (patch +1), `make release-minor`, `make release-major`. Cada uno: lint → `build-all` con VER → git commit + tag → push → `gh release create` con assets `gtt-linux-amd64`, `gtt-windows-amd64.exe`, `gtt-darwin-amd64`.
+
+### Semver comparison en `CheckLatest`
+
+`updater.isNewer(candidate, base string) bool` parsea `vMAJOR.MINOR.PATCH` y compara numéricamente. `CheckLatest` solo retorna una versión si es **estrictamente mayor** que la actual — nunca ofrece downgrade.
 
 ---
 
@@ -157,4 +165,5 @@ Targets de release en Makefile: `make release` (patch), `make release-minor`, `m
 - **Texto user-facing en español** (mensajes, prompts, errores).
 - **Manejo de errores:** siempre `fmt.Errorf("contexto: %w", err)`.
 - **Router manual** en `cmd/root.go` — no se usa Cobra.
+- **Colores ANSI** definidos como constantes en `cmd/root.go` y accesibles por todo el package `cmd`.
 - No hay tests automatizados. Herramienta interna de equipo pequeño.

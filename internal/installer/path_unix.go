@@ -32,6 +32,6 @@ func addToPath(dir string) error {
 	}
 	defer f.Close()
 
-	_, err = fmt.Fprintf(f, "\n# deploy-doc\nexport PATH=\"$PATH:%s\"\n", dir)
+	_, err = fmt.Fprintf(f, "\n# gtt\nexport PATH=\"$PATH:%s\"\n", dir)
 	return err
 }

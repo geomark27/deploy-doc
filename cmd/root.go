@@ -7,10 +7,38 @@ import (
 	"github.com/geomark27/deploy-doc/internal/build"
 )
 
-// commands registered here
+// ANSI color helpers — used across all cmd files.
+const (
+	clReset  = "\033[0m"
+	clBold   = "\033[1m"
+	clRed    = "\033[31m"
+	clGreen  = "\033[32m"
+	clYellow = "\033[33m"
+	clCyan   = "\033[36m"
+)
+
+func clr(color, text string) string { return color + text + clReset }
+
+// stepLabel prints a cyan "[n/total] msg" line.
+func stepLabel(n, total int, msg string) {
+	fmt.Printf("%s[%d/%d]%s %s\n", clCyan+clBold, n, total, clReset, msg)
+}
+
+// okLine prints an indented green ✓ line.
+func okLine(msg string) { fmt.Printf("      %s✓%s %s\n", clGreen, clReset, msg) }
+
+// warnLine prints an indented yellow ⚠ line.
+func warnLine(msg string) { fmt.Printf("      %s⚠%s %s\n", clYellow, clReset, msg) }
+
+// errLine prints an indented red ✗ line.
+func errLine(msg string) { fmt.Printf("      %s✗%s %s\n", clRed, clReset, msg) }
+
+// commands registered here — g and gen are short aliases for generate.
 var commands = map[string]func([]string) error{
 	"init":     runInit,
 	"generate": runGenerate,
+	"gen":      runGenerate,
+	"g":        runGenerate,
 	"update":   runUpdate,
 	"project":  runProject,
 }
@@ -28,13 +56,13 @@ func Execute() error {
 		return nil
 	}
 	if cmdName == "version" || cmdName == "--version" || cmdName == "-v" {
-		fmt.Printf("deploy-doc %s\n", build.Version)
+		fmt.Printf("gtt %s\n", build.Version)
 		return nil
 	}
 
 	fn, ok := commands[cmdName]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Comando desconocido: %s\n\n", cmdName)
+		fmt.Fprintf(os.Stderr, clr(clRed, "Comando desconocido: ")+"%s\n\n", cmdName)
 		printUsage()
 		return fmt.Errorf("comando inválido")
 	}
@@ -43,31 +71,24 @@ func Execute() error {
 }
 
 func printUsage() {
-	fmt.Printf(`deploy-doc %s - Generador de documentos de despliegue
-
-Uso:
-  deploy-doc <comando> [opciones]
-
-Comandos:
-  init      Configura tus credenciales de Atlassian
-  generate  Genera un documento de despliegue en Confluence
-  project   Gestiona proyectos (list, add, default, remove)
-  update    Actualiza deploy-doc a la ultima version
-  version   Muestra la version actual
-
-Flags de generate:
-  --issue            Clave del issue en Jira (requerido)
-  --commit-backend   Hash del commit de backend
-  --commit-frontend  Hash del commit de frontend
-  --project          Nombre del proyecto a usar (opcional)
-
-Ejemplos:
-  deploy-doc init
-  deploy-doc generate --issue APP-1999 --commit-backend 27cefd86 --commit-frontend 5bd0cea0
-  deploy-doc generate --project ecuapass --issue ECU-123 --commit-backend abc1234
-  deploy-doc project list
-  deploy-doc project add
-  deploy-doc project default echo
-  deploy-doc update
-`, build.Version)
+	fmt.Printf(clCyan+clBold+"gtt %s"+clReset+" — Generador de documentos de despliegue\n\n", build.Version)
+	fmt.Print(clBold + "Uso:\n" + clReset)
+	fmt.Print("  gtt <comando> [opciones]\n\n")
+	fmt.Print(clBold + "Comandos:\n" + clReset)
+	fmt.Print("  init              Configura tus credenciales de Atlassian\n")
+	fmt.Print("  g, gen, generate  Genera un documento de despliegue en Confluence\n")
+	fmt.Print("  project           Gestiona proyectos (list, add, default, remove)\n")
+	fmt.Print("  update            Actualiza gtt a la ultima version\n")
+	fmt.Print("  version           Muestra la version actual\n\n")
+	fmt.Print(clBold + "Flags de generate:\n" + clReset)
+	fmt.Print("  -i, --issue            Clave del issue en Jira " + clYellow + "(requerido)" + clReset + "\n")
+	fmt.Print("  -b, --commit-backend   Hash(es) del commit de backend  (separar con coma)\n")
+	fmt.Print("  -f, --commit-frontend  Hash(es) del commit de frontend (separar con coma)\n")
+	fmt.Print("  -p, --project          Nombre del proyecto a usar (opcional)\n\n")
+	fmt.Print(clBold + "Ejemplos:\n" + clReset)
+	fmt.Print("  gtt init\n")
+	fmt.Print("  gtt g -i APP-1999 -b 27cefd86 -f 5bd0cea0\n")
+	fmt.Print("  gtt g -p ecuapass -i ECU-123 -b abc1234\n")
+	fmt.Print("  gtt project list\n")
+	fmt.Print("  gtt update\n\n")
 }

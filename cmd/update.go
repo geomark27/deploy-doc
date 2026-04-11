@@ -9,7 +9,7 @@ import (
 )
 
 func runUpdate(_ []string) error {
-	fmt.Printf("Version actual : %s\n", build.Version)
+	fmt.Printf(clBold+"Versión actual : "+clReset+clCyan+"%s"+clReset+"\n", build.Version)
 	fmt.Println("Buscando actualizaciones...")
 	fmt.Println()
 
@@ -19,19 +19,39 @@ func runUpdate(_ []string) error {
 	}
 
 	if latest == "" {
-		fmt.Println("Ya tienes la version mas reciente.")
+		fmt.Println(clGreen + "✓" + clReset + " Ya tienes la versión más reciente.")
 		return nil
 	}
 
-	fmt.Printf("Nueva version disponible: %s\n\n", latest)
+	fmt.Printf(clGreen+"Nueva versión disponible: "+clBold+"%s"+clReset+"\n\n", latest)
 
-	if err := updater.SelfUpdate(latest); err != nil {
+	migrated, err := updater.SelfUpdate(latest)
+	if err != nil {
 		return fmt.Errorf("error actualizando: %w", err)
 	}
 
-	fmt.Printf("OK Actualizado a %s\n", latest)
-	if runtime.GOOS == "windows" {
-		fmt.Println("\nReinicia tu terminal para aplicar los cambios.")
+	if migrated {
+		fmt.Println()
+		fmt.Println(clGreen + clBold + "✓ Migración completada: deploy-doc → gtt" + clReset)
+		fmt.Println()
+		fmt.Println("  Versión instalada : " + clBold + latest + clReset)
+		fmt.Println("  Nuevo comando     : " + clGreen + clBold + "gtt" + clReset)
+		fmt.Println()
+		fmt.Println("  Todos los comandos siguen funcionando igual:")
+		fmt.Println("    " + clBold + "gtt g -i APP-1999 -b <hash>" + clReset)
+		fmt.Println("    " + clBold + "gtt project list" + clReset)
+		fmt.Println("    " + clBold + "gtt update" + clReset)
+		fmt.Println()
+		if runtime.GOOS == "windows" {
+			fmt.Println("  " + clYellow + "Reinicia tu terminal" + clReset + " para que 'gtt' quede disponible.")
+		} else {
+			fmt.Println("  " + clYellow + "Abre una nueva terminal" + clReset + " o ejecuta: source ~/.zshrc")
+		}
+	} else {
+		fmt.Printf(clGreen+clBold+"✓ Actualizado a %s"+clReset+"\n", latest)
+		if runtime.GOOS == "windows" {
+			fmt.Println("\nReinicia tu terminal para aplicar los cambios.")
+		}
 	}
 	return nil
 }

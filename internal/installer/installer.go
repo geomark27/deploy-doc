@@ -40,9 +40,9 @@ func Run() error {
 		return fmt.Errorf("no se pudo crear el directorio de instalación: %w", err)
 	}
 
-	binaryName := "deploy-doc"
+	binaryName := "gtt"
 	if runtime.GOOS == "windows" {
-		binaryName = "deploy-doc.exe"
+		binaryName = "gtt.exe"
 	}
 	dest := filepath.Join(dir, binaryName)
 

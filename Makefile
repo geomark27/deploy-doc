@@ -2,7 +2,7 @@
 #  deploy-doc - Makefile
 # ================================================================
 
-BINARY_NAME=deploy-doc
+BINARY_NAME=gtt
 BUILD_DIR=./bin
 MAIN=./main.go
 MODULE=github.com/geomark27/deploy-doc
@@ -28,7 +28,7 @@ NC=\033[0m
 .PHONY: help
 help:
 	@echo ""
-	@echo "$(CYAN)  deploy-doc - Generador de documentos de despliegue$(NC)"
+	@echo "$(CYAN)  gtt - Generador de documentos de despliegue$(NC)"
 	@echo ""
 	@echo "  Uso: make <comando>"
 	@echo ""
@@ -61,7 +61,7 @@ help:
 	@echo "$(YELLOW)  💡 Ejemplos:$(NC)"
 	@echo "    make build"
 	@echo "    make install"
-	@echo "    make run ARGS='generate --issue APP-1999 --commit-backend 27cefd86'"
+	@echo "    make run ARGS='g -i APP-1999 -b 27cefd86'"
 	@echo "    make push m='feat: agrego comando X'"
 	@echo "    make sync m='fix: corrijo validación'"
 	@echo ""
@@ -74,7 +74,8 @@ help:
 build:
 	@echo "$(YELLOW)Compilando...$(NC)"
 	@mkdir -p $(BUILD_DIR)
-	@go build -trimpath -ldflags "-s -w" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN)
+	@VER=$$(git describe --tags --abbrev=0 2>/dev/null || echo "dev"); \
+	go build -trimpath -ldflags "-s -w -X $(VERSION_PKG).Version=$$VER" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN)
 	@echo "$(GREEN)✓ Binario generado en $(BUILD_DIR)/$(BINARY_NAME)$(NC)"
 
 .PHONY: build-all
@@ -95,6 +96,8 @@ install: build
 	@mkdir -p ~/.local/bin
 	@cp $(BUILD_DIR)/$(BINARY_NAME) ~/.local/bin/$(BINARY_NAME)
 	@echo "$(GREEN)✓ Instalado en ~/.local/bin/$(BINARY_NAME)$(NC)"
+	@echo ""
+	@echo "  Usa: $(CYAN)gtt g -i APP-XXXX -b <hash>$(NC)"
 	@echo ""
 	@echo "  Si el comando no está disponible, agrega esto a tu ~/.zshrc o ~/.bashrc:"
 	@echo "  export PATH=\$$PATH:~/.local/bin"
@@ -239,10 +242,16 @@ release: lint
 	echo "$(GREEN)✓ Push completado$(NC)"; \
 	echo ""; \
 	echo "$(YELLOW)[3/3]$(NC) Publicando binarios en GitHub Releases..."; \
+	cp $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64       $(BUILD_DIR)/deploy-doc-linux-amd64; \
+	cp $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(BUILD_DIR)/deploy-doc-windows-amd64.exe; \
+	cp $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64      $(BUILD_DIR)/deploy-doc-darwin-amd64; \
 	gh release create $$NEW_TAG \
 		$(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
 		$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe \
 		$(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 \
+		$(BUILD_DIR)/deploy-doc-linux-amd64 \
+		$(BUILD_DIR)/deploy-doc-windows-amd64.exe \
+		$(BUILD_DIR)/deploy-doc-darwin-amd64 \
 		--title "$$NEW_TAG" \
 		--notes "Release $$NEW_TAG"; \
 	echo ""; \
@@ -257,6 +266,9 @@ release-minor: lint
 	NEW_MINOR=$$((MINOR + 1)); \
 	NEW_TAG="v$$MAJOR.$$NEW_MINOR.0"; \
 	$(MAKE) build-all VER=$$NEW_TAG; \
+	cp $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64       $(BUILD_DIR)/deploy-doc-linux-amd64; \
+	cp $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(BUILD_DIR)/deploy-doc-windows-amd64.exe; \
+	cp $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64      $(BUILD_DIR)/deploy-doc-darwin-amd64; \
 	git add -A; \
 	git commit -m "release: $$NEW_TAG" 2>/dev/null || true; \
 	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
@@ -265,6 +277,9 @@ release-minor: lint
 		$(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
 		$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe \
 		$(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 \
+		$(BUILD_DIR)/deploy-doc-linux-amd64 \
+		$(BUILD_DIR)/deploy-doc-windows-amd64.exe \
+		$(BUILD_DIR)/deploy-doc-darwin-amd64 \
 		--title "$$NEW_TAG" \
 		--notes "Release $$NEW_TAG"; \
 	echo "$(GREEN)✓ Release minor $$NEW_TAG completado$(NC)"
@@ -276,6 +291,9 @@ release-major: lint
 	NEW_MAJOR=$$((MAJOR + 1)); \
 	NEW_TAG="v$$NEW_MAJOR.0.0"; \
 	$(MAKE) build-all VER=$$NEW_TAG; \
+	cp $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64       $(BUILD_DIR)/deploy-doc-linux-amd64; \
+	cp $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(BUILD_DIR)/deploy-doc-windows-amd64.exe; \
+	cp $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64      $(BUILD_DIR)/deploy-doc-darwin-amd64; \
 	git add -A; \
 	git commit -m "release: $$NEW_TAG" 2>/dev/null || true; \
 	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
@@ -284,6 +302,9 @@ release-major: lint
 		$(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
 		$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe \
 		$(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 \
+		$(BUILD_DIR)/deploy-doc-linux-amd64 \
+		$(BUILD_DIR)/deploy-doc-windows-amd64.exe \
+		$(BUILD_DIR)/deploy-doc-darwin-amd64 \
 		--title "$$NEW_TAG" \
 		--notes "Release $$NEW_TAG"; \
 	echo "$(GREEN)✓ Release major $$NEW_TAG completado$(NC)"

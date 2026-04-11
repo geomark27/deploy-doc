@@ -56,7 +56,7 @@ func Load() (*Config, error) {
 	}
 
 	if cfg.AtlassianEmail == "" || cfg.AtlassianToken == "" || cfg.BaseURL == "" {
-		return nil, fmt.Errorf("configuración incompleta. Corre: deploy-doc init")
+		return nil, fmt.Errorf("configuración incompleta. Corre: gtt init")
 	}
 
 	return cfg, nil
@@ -68,7 +68,7 @@ func (c *Config) GetProject(name string) (*ProjectConfig, string, error) {
 	if name != "" {
 		proj, ok := c.Projects[name]
 		if !ok {
-			return nil, "", fmt.Errorf("proyecto '%s' no encontrado. Usa: deploy-doc project list", name)
+			return nil, "", fmt.Errorf("proyecto '%s' no encontrado. Usa: gtt project list", name)
 		}
 		return proj, name, nil
 	}

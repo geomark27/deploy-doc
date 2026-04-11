@@ -1,4 +1,4 @@
-# Bitácora de versiones — deploy-doc
+# Bitácora de versiones — gtt (deploy-doc)
 
 Historial de versiones con contexto de solicitud, decisiones técnicas e implementación.
 Cada entrada sigue el formato: **Solicitud → Motivación → Diseño técnico → Archivos → Verificación**.
@@ -11,6 +11,7 @@ Cada entrada sigue el formato: **Solicitud → Motivación → Diseño técnico 
 |---|---|---|---|
 | [v1.0.x LTS](./v1.0.x-lts.md) | 2025 | **LTS** | Primera versión en producción — baseline del proyecto |
 | [v1.1.0](./v1.1.0.md) | 2026-04-03 | Minor | BitbucketOrg dinámico, multi-commit, `--dry-run`, warning init, búsqueda x10 |
+| [v1.1.1](./v1.1.1.md) | 2026-04-10 | Patch | Renombre a `gtt`, flags cortos, UI con colores y pasos, fix downgrade en update |
 
 ---
 

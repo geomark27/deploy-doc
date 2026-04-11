@@ -17,13 +17,13 @@ func main() {
 	reader := bufio.NewReader(os.Stdin)
 
 	if !installer.IsInstalled() {
-		fmt.Println("deploy-doc no está instalado en este sistema.")
+		fmt.Println("gtt no está instalado en este sistema.")
 		fmt.Printf("Destino: %s\n\n", installer.InstallDir())
 		fmt.Println("La instalación realizará las siguientes acciones:")
 		fmt.Println("  1. Copiar el ejecutable al directorio de destino")
 		fmt.Println("  2. Agregar ese directorio al PATH del usuario")
 		fmt.Println()
-		fmt.Print("¿Deseas instalar deploy-doc ahora? [S/n]: ")
+		fmt.Print("¿Deseas instalar gtt ahora? [S/n]: ")
 
 		ans, _ := reader.ReadString('\n')
 		ans = strings.TrimSpace(strings.ToLower(ans))
@@ -42,12 +42,12 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Println("OK Binario copiado")
-		fmt.Println("OK Agregado al PATH del usuario")
+		fmt.Println("✓ Binario copiado")
+		fmt.Println("✓ Agregado al PATH del usuario")
 		fmt.Println()
-		fmt.Println("----------------------------------------")
-		fmt.Println("  deploy-doc instalado correctamente!")
-		fmt.Println("----------------------------------------")
+		fmt.Println("────────────────────────────────")
+		fmt.Println("  gtt instalado correctamente!")
+		fmt.Println("────────────────────────────────")
 		fmt.Println()
 
 		if runtime.GOOS == "windows" {
@@ -61,7 +61,7 @@ func main() {
 		}
 
 		fmt.Println()
-		fmt.Println("    deploy-doc init")
+		fmt.Println("    gtt init")
 		fmt.Println()
 		pause(reader)
 		os.Exit(0)
@@ -86,7 +86,7 @@ func main() {
 	// Print update notification after command finishes
 	select {
 	case latest := <-updateCh:
-		fmt.Printf("\nNueva version disponible: %s  →  ejecuta: deploy-doc update\n", latest)
+		fmt.Printf("\nNueva versión disponible: %s  →  ejecuta: gtt update\n", latest)
 	default:
 	}
 

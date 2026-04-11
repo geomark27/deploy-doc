@@ -1,6 +1,6 @@
-# Guía de Usuario — deploy-doc
+# Guía de Usuario — gtt
 
-`deploy-doc` es una herramienta de línea de comandos que genera automáticamente documentos de despliegue en Confluence a partir de un issue de Jira y los commits de Git correspondientes.
+`gtt` es una herramienta de línea de comandos que genera automáticamente documentos de despliegue en Confluence a partir de un issue de Jira y los commits de Git correspondientes.
 
 ---
 
@@ -39,14 +39,14 @@ Descarga el binario correspondiente a tu sistema operativo desde los releases de
 
 | Sistema operativo | Destino de instalación |
 |---|---|
-| Linux / macOS | `~/.local/bin/deploy-doc` |
-| Windows | `%LOCALAPPDATA%\Programs\deploy-doc\deploy-doc.exe` |
+| Linux / macOS | `~/.local/bin/gtt` |
+| Windows | `%LOCALAPPDATA%\Programs\deploy-doc\gtt.exe` |
 
 **Linux / macOS**
 
 ```bash
-chmod +x deploy-doc-linux   # o deploy-doc-macos
-./deploy-doc-linux
+chmod +x gtt-linux-amd64   # o gtt-darwin-amd64
+./gtt-linux-amd64
 ```
 
 Al terminar la instalación, recarga tu shell:
@@ -58,12 +58,12 @@ source ~/.bashrc  # si usas bash
 
 **Windows**
 
-Ejecuta `deploy-doc-windows.exe` desde PowerShell o haciendo doble clic. Después de la instalación, cierra y vuelve a abrir PowerShell.
+Ejecuta `gtt-windows-amd64.exe` desde PowerShell o haciendo doble clic. Después de la instalación, cierra y vuelve a abrir PowerShell.
 
 Verifica que quedó instalado:
 
 ```bash
-deploy-doc version
+gtt version
 ```
 
 ---
@@ -73,7 +73,7 @@ deploy-doc version
 Antes de usar `generate`, debes guardar tus credenciales de Atlassian con el comando `init`.
 
 ```bash
-deploy-doc init
+gtt init
 ```
 
 Se te pedirá:
@@ -117,7 +117,7 @@ projects:
 
 ## Proyectos
 
-Un **proyecto** es una configuración con nombre que asocia las rutas locales de tus repositorios (backend y/o frontend) al CLI. Esto permite ejecutar `deploy-doc generate` desde **cualquier carpeta** sin tener que estar parado dentro del repositorio correspondiente.
+Un **proyecto** es una configuración con nombre que asocia las rutas locales de tus repositorios (backend y/o frontend) al CLI. Esto permite ejecutar `gtt g` desde **cualquier carpeta** sin tener que estar parado dentro del repositorio correspondiente.
 
 ### ¿Por qué usar proyectos?
 
@@ -158,7 +158,7 @@ C:/laragon/www/operativo-api
 Configura o actualiza las credenciales de Atlassian y opcionalmente configura un proyecto.
 
 ```bash
-deploy-doc init
+gtt init
 ```
 
 No recibe flags. Es un asistente interactivo que guía campo por campo. Si ya existe una configuración guardada, pregunta si deseas sobreescribirla (`[s/N]`, por defecto No). Los proyectos configurados se conservan siempre.
@@ -167,69 +167,79 @@ No recibe flags. Es un asistente interactivo que guía campo por campo. Si ya ex
 
 ### generate
 
-Genera un documento de despliegue en Confluence.
+Genera un documento de despliegue en Confluence. Disponible con tres nombres equivalentes: `g` (recomendado), `gen`, `generate`.
 
 ```bash
-deploy-doc generate --issue <ISSUE_KEY> [--commit-backend <HASH>] [--commit-frontend <HASH>] [--project <NOMBRE>]
+gtt g -i <ISSUE_KEY> [-b <HASH>] [-f <HASH>] [-p <PROYECTO>]
 ```
 
 **Flags disponibles:**
 
-| Flag | Requerido | Descripción |
-|---|---|---|
-| `--issue` | Sí | Clave del issue en Jira (ej: `APP-1999`) |
-| `--commit-backend` | Condicional* | Hash(es) del commit de backend. Acepta varios separados por coma |
-| `--commit-frontend` | Condicional* | Hash(es) del commit de frontend. Acepta varios separados por coma |
-| `--project` | No | Nombre del proyecto a usar. Si se omite, usa el `default_project` |
-| `--dry-run` | No | Imprime el documento ADF en stdout sin crear nada en Confluence |
+| Flag corto | Flag largo | Requerido | Descripción |
+|---|---|---|---|
+| `-i` | `--issue` | Sí | Clave del issue en Jira (ej: `APP-1999`) |
+| `-b` | `--commit-backend` | Condicional* | Hash(es) del commit de backend. Acepta varios separados por coma |
+| `-f` | `--commit-frontend` | Condicional* | Hash(es) del commit de frontend. Acepta varios separados por coma |
+| `-p` | `--project` | No | Nombre del proyecto a usar. Si se omite, usa el `default_project` |
+| — | `--dry-run` | No | Imprime el documento ADF en stdout sin crear nada en Confluence |
 
-> *Al menos uno de los dos commits es requerido. Los flags aceptan tanto `--flag valor` como `--flag=valor`.
+> *Al menos uno de los dos commits es requerido. Los flags aceptan `-i APP-1999`, `-i=APP-1999`, `--issue APP-1999` y `--issue=APP-1999`.
 
 **Comportamiento con proyectos:**
 
 - Si el proyecto tiene `backend_path`, git buscará el commit en esa ruta.
 - Si el proyecto no tiene `backend_path` (o no hay proyecto configurado), git buscará en el directorio actual.
-- Si se pasa `--commit-frontend` pero el proyecto no tiene `frontend_path`, se mostrará una advertencia y git usará el directorio actual.
-- Si se especifica `--project noexiste`, el comando falla con un mensaje claro.
+- Si se pasa `-f` pero el proyecto no tiene `frontend_path`, se mostrará una advertencia y git usará el directorio actual.
+- Si se especifica `-p noexiste`, el comando falla con un mensaje claro.
 
 **Ejemplos:**
 
 ```bash
-# Usando el proyecto por defecto
-deploy-doc generate --issue APP-1999 --commit-backend 27cefd86
+# Forma corta recomendada — proyecto por defecto
+gtt g -i APP-1999 -b 27cefd86
+
+# Con frontend
+gtt g -i APP-1999 -b 27cefd86 -f 5bd0cea0
 
 # Especificando proyecto
-deploy-doc generate --project ecuapass --issue ECU-123 --commit-backend abc1234
-
-# Frontend y backend con proyecto por defecto
-deploy-doc generate --issue APP-1999 --commit-backend 27cefd86 --commit-frontend 5bd0cea0
+gtt g -p ecuapass -i ECU-123 -b abc1234
 
 # Múltiples commits (separados por coma)
-deploy-doc generate --issue APP-1999 --commit-backend abc123,def456
+gtt g -i APP-1999 -b abc123,def456
 
-# Vista previa del documento sin publicar en Confluence
-deploy-doc generate --issue APP-1999 --commit-backend 27cefd86 --dry-run
+# Vista previa sin publicar en Confluence
+gtt g -i APP-1999 -b 27cefd86 --dry-run
 
-# Sin proyectos configurados (git corre en el directorio actual)
-deploy-doc generate --issue APP-1999 --commit-backend 27cefd86
+# Usando flags largos (también válido)
+gtt generate --issue APP-1999 --commit-backend 27cefd86
 ```
 
 **Flujo interactivo del comando:**
 
-1. Muestra el proyecto activo (si hay uno configurado)
-2. Busca el issue en Jira y muestra su título
-3. Verifica si ya existe un documento de despliegue para ese issue
-   - Si existe, pregunta qué hacer:
-     ```
-     [1] Actualizar el documento existente
-     [2] Crear uno nuevo de todas formas
-     [3] Cancelar
-     ```
-4. Lee los archivos modificados en cada commit (usando las rutas del proyecto si están configuradas). Soporta múltiples commits por servicio
-5. Si un commit falla pero el otro tiene éxito, continúa con la información disponible
-6. Muestra tus últimos documentos de despliegue para elegir la ubicación en Confluence (hasta 10 opciones)
-7. Pide confirmación antes de crear o actualizar
-8. Crea o actualiza la página y muestra la URL resultante
+```
+Proyecto: echo
+
+[1/4] Buscando issue APP-1999...
+      ✓ APP-1999 — Deploy módulo de pagos
+
+[2/4] Verificando documentos existentes...
+      ✓ Ninguno encontrado   (o ⚠ con opciones si ya existe)
+
+[3/4] Leyendo commits...
+      ✓ backend  27cefd86  →  12 archivos
+      ✓ frontend 5bd0cea0  →  8 archivos
+
+[4/4] Seleccionando ubicación en Confluence...
+      [1] Deploy - Sprint 42
+      [2] Deploy - Sprint 41
+
+  Opción (1-2): _
+```
+
+Si ya existe un documento para el issue, el paso `[2/4]` ofrece:
+```
+[1] Actualizar    [2] Crear nuevo    [3] Cancelar
+```
 
 ---
 
@@ -238,25 +248,16 @@ deploy-doc generate --issue APP-1999 --commit-backend 27cefd86
 Gestiona los proyectos configurados en el CLI.
 
 ```bash
-deploy-doc project <subcomando> [opciones]
+gtt project <subcomando> [opciones]
 ```
 
-#### project list
+#### project list / project ls
 
-Lista todos los proyectos configurados. El proyecto por defecto se marca con `*`.
+Lista todos los proyectos configurados. El proyecto por defecto se marca con `*` en verde.
 
 ```bash
-deploy-doc project list
-```
-
-Salida ejemplo:
-```
-PROYECTO        BACKEND PATH                              FRONTEND PATH
---------------------------------------------------------------------
-* echo          C:\laragon\www\operativo-api              C:\Proyects\Angular\echo-logistics
-  ecuapass      C:\laragon\www\ecuapass-api               (no configurado)
-
-* Proyecto por defecto: echo
+gtt project list
+gtt project ls   # alias equivalente
 ```
 
 #### project add
@@ -264,7 +265,7 @@ PROYECTO        BACKEND PATH                              FRONTEND PATH
 Asistente interactivo para agregar un nuevo proyecto.
 
 ```bash
-deploy-doc project add
+gtt project add
 ```
 
 Te pedirá:
@@ -282,12 +283,7 @@ Si el proyecto ya existe, pregunta si deseas sobreescribirlo.
 Cambia el proyecto por defecto.
 
 ```bash
-deploy-doc project default <nombre>
-```
-
-Ejemplo:
-```bash
-deploy-doc project default ecuapass
+gtt project default <nombre>
 ```
 
 #### project remove
@@ -295,7 +291,7 @@ deploy-doc project default ecuapass
 Elimina un proyecto. Pide confirmación antes de eliminar.
 
 ```bash
-deploy-doc project remove <nombre>
+gtt project remove <nombre>
 ```
 
 Si el proyecto eliminado era el por defecto, avisa y limpia la configuración de default.
@@ -307,14 +303,14 @@ Si el proyecto eliminado era el por defecto, avisa y limpia la configuración de
 Verifica si hay una nueva versión disponible y actualiza el CLI automáticamente.
 
 ```bash
-deploy-doc update
+gtt update
 ```
 
-Descarga el binario de la última versión desde GitHub Releases y reemplaza el ejecutable actual. En Windows, reinicia la terminal después de actualizar.
+Descarga el binario de la última versión desde GitHub Releases y reemplaza el ejecutable actual. Solo actualiza si la versión remota es **estrictamente mayor** que la instalada — nunca hace downgrade. En Windows, reinicia la terminal después de actualizar.
 
-> **Nota:** Al usar cualquier comando (`generate`, `init`, etc.), el CLI verifica automáticamente si hay una versión nueva disponible y te notifica al finalizar:
+> **Nota:** Al usar cualquier comando (`g`, `init`, etc.), el CLI verifica automáticamente si hay una versión nueva disponible y te notifica al finalizar:
 > ```
-> Nueva version disponible: v1.1.0  →  ejecuta: deploy-doc update
+> Nueva versión disponible: v1.1.1  →  ejecuta: gtt update
 > ```
 
 ---
@@ -324,7 +320,7 @@ Descarga el binario de la última versión desde GitHub Releases y reemplaza el 
 Muestra la versión instalada del CLI.
 
 ```bash
-deploy-doc version
+gtt version
 ```
 
 ---
@@ -334,9 +330,9 @@ deploy-doc version
 Muestra la ayuda general con los comandos disponibles.
 
 ```bash
-deploy-doc help
-deploy-doc --help
-deploy-doc -h
+gtt help
+gtt --help
+gtt -h
 ```
 
 ---
@@ -346,25 +342,22 @@ deploy-doc -h
 ### Primera vez
 
 ```bash
-# 1. Instala el binario (ejecutar el .exe descargado)
+# 1. Instala el binario (ejecutar el archivo descargado)
 # 2. Configura credenciales y primer proyecto
-deploy-doc init
+gtt init
 
 # 3. Verifica la configuración
-deploy-doc project list
+gtt project list
 ```
 
 ### Uso diario
 
 ```bash
-# 1. Obtén el hash de tu commit (en cualquier terminal, no importa el directorio)
-#    Si tienes el proyecto configurado, no necesitas estar en el repo
+# Genera el documento (desde cualquier directorio)
+gtt g -i APP-1999 -b 27cefd86
 
-# 2. Genera el documento
-deploy-doc generate --issue APP-1999 --commit-backend 27cefd86
-
-# 3. Si trabajas en otro proyecto
-deploy-doc generate --project ecuapass --issue ECU-200 --commit-backend abc1234
+# Si trabajas en otro proyecto
+gtt g -p ecuapass -i ECU-200 -b abc1234
 ```
 
 ### Ejemplo multi-proyecto
@@ -374,15 +367,11 @@ deploy-doc generate --project ecuapass --issue ECU-200 --commit-backend abc1234
 # - echo (default): operativo-api + echo-logistics
 # - ecuapass: ecuapass-api
 
-# Generar doc de echo (usa el default)
-deploy-doc generate --issue APP-1999 \
-  --commit-backend 27cefd8671946ab5a617688a6933777b234ebef6 \
-  --commit-frontend 5bd0cea0d5033eec0ad74ba302bee81fcc194730
+# Generar doc de echo con backend + frontend (usa el default)
+gtt g -i APP-1999 -b 27cefd8671946ab5a617688a6933777b234ebef6 -f 5bd0cea0d5033eec0ad74ba302bee81fcc194730
 
 # Generar doc de ecuapass (especifica el proyecto)
-deploy-doc generate --project ecuapass \
-  --issue ECU-123 \
-  --commit-backend a3f8c12d9e4b56f10987654321abcdef01234567
+gtt g -p ecuapass -i ECU-123 -b a3f8c12d9e4b56f10987654321abcdef01234567
 ```
 
 ---
@@ -413,15 +402,15 @@ Cada documento creado en Confluence incluye:
 
 | Error | Causa | Solución |
 |---|---|---|
-| `configuración incompleta. Corre: deploy-doc init` | No hay credenciales guardadas | Ejecuta `deploy-doc init` |
-| `credenciales inválidas (401)` | Token vencido o incorrecto | Genera un nuevo token y corre `deploy-doc init` |
+| `configuración incompleta. Corre: gtt init` | No hay credenciales guardadas | Ejecuta `gtt init` |
+| `credenciales inválidas (401)` | Token vencido o incorrecto | Genera un nuevo token y corre `gtt init` |
 | `sin permisos (403)` | El token no tiene acceso al recurso | Verifica los permisos del token en Atlassian |
 | `recurso no encontrado (404)` | El issue no existe o está mal escrito | Verifica la clave del issue en Jira |
 | `error al leer el commit <hash>` | El hash no existe en el repo configurado | Verifica el hash con `git log` desde el repositorio correcto |
 | `git no encontrado en el sistema` | Git no está instalado o no está en PATH | Instala Git o agrégalo al PATH |
 | `no se encontraron documentos de despliegue previos` | No hay páginas previas como referencia de ubicación | Crea un documento manualmente en Confluence como base |
-| `proyecto 'X' no encontrado` | El proyecto no está configurado | Usa `deploy-doc project list` para ver los proyectos disponibles o `deploy-doc project add` para agregar uno |
-| `⚠ Advertencia: el proyecto no tiene backend_path configurado` | El proyecto existe pero no tiene ruta de backend | Configura la ruta con `deploy-doc project add` sobreescribiendo el proyecto existente |
+| `proyecto 'X' no encontrado` | El proyecto no está configurado | Usa `gtt project list` para ver los proyectos disponibles o `gtt project add` para agregar uno |
+| `⚠ el proyecto no tiene backend_path configurado` | El proyecto existe pero no tiene ruta de backend | Configura la ruta con `gtt project add` sobreescribiendo el proyecto existente |
 
 ---
 
@@ -442,7 +431,7 @@ export ATLASSIAN_EMAIL="ci@empresa.com"
 export ATLASSIAN_TOKEN="tu_token"
 export ATLASSIAN_BASE_URL="https://tuempresa.atlassian.net"
 
-deploy-doc generate --issue APP-1999 --commit-backend $COMMIT_SHA
+gtt g -i APP-1999 -b $COMMIT_SHA
 ```
 
 > Las rutas de proyectos no se pueden definir como variables de entorno; deben configurarse en el archivo `config.yaml`.
@@ -454,7 +443,7 @@ deploy-doc generate --issue APP-1999 --commit-backend $COMMIT_SHA
 **Linux / macOS:**
 
 ```bash
-rm ~/.local/bin/deploy-doc
+rm ~/.local/bin/gtt
 rm -rf ~/.config/deploy-doc
 ```
 

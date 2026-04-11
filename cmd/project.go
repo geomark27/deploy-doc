@@ -11,6 +11,7 @@ import (
 
 var projectSubcommands = map[string]func([]string) error{
 	"list":    runProjectList,
+	"ls":      runProjectList,
 	"add":     runProjectAdd,
 	"default": runProjectDefault,
 	"remove":  runProjectRemove,
@@ -24,7 +25,7 @@ func runProject(args []string) error {
 	sub := args[0]
 	fn, ok := projectSubcommands[sub]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "Subcomando desconocido: project %s\n\n", sub)
+		fmt.Fprintf(os.Stderr, clr(clRed, "Subcomando desconocido: ")+"project %s\n\n", sub)
 		printProjectUsage()
 		return fmt.Errorf("subcomando inválido")
 	}
@@ -39,30 +40,33 @@ func runProjectList(_ []string) error {
 
 	if len(cfg.Projects) == 0 {
 		fmt.Println("No hay proyectos configurados.")
-		fmt.Println("Usa: deploy-doc project add")
+		fmt.Println("Usa: gtt project add")
 		return nil
 	}
 
-	fmt.Printf("%-15s %-45s %-45s\n", "PROYECTO", "BACKEND PATH", "FRONTEND PATH")
-	fmt.Println(strings.Repeat("-", 108))
+	fmt.Printf(clBold+"%-15s %-45s %-45s"+clReset+"\n", "PROYECTO", "BACKEND PATH", "FRONTEND PATH")
+	fmt.Println(strings.Repeat("─", 108))
 	for name, proj := range cfg.Projects {
-		marker := "  "
-		if name == cfg.DefaultProject {
-			marker = "* "
+		isDefault := name == cfg.DefaultProject
+		nameStr := name
+		if isDefault {
+			nameStr = clr(clGreen+clBold, "* "+name)
+		} else {
+			nameStr = "  " + name
 		}
 		backendPath := proj.BackendPath
 		if backendPath == "" {
-			backendPath = "(no configurado)"
+			backendPath = clr(clYellow, "(no configurado)")
 		}
 		frontendPath := proj.FrontendPath
 		if frontendPath == "" {
-			frontendPath = "(no configurado)"
+			frontendPath = clr(clYellow, "(no configurado)")
 		}
-		fmt.Printf("%s%-13s %-45s %-45s\n", marker, name, backendPath, frontendPath)
+		fmt.Printf("%-15s %-45s %-45s\n", nameStr, backendPath, frontendPath)
 	}
 	fmt.Println()
 	if cfg.DefaultProject != "" {
-		fmt.Printf("* Proyecto por defecto: %s\n", cfg.DefaultProject)
+		fmt.Printf(clGreen+"*"+clReset+" Proyecto por defecto: "+clBold+"%s"+clReset+"\n", cfg.DefaultProject)
 	}
 	return nil
 }
@@ -74,7 +78,7 @@ func runProjectAdd(_ []string) error {
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("--- Agregar proyecto ---")
+	fmt.Println(clCyan + clBold + "── Agregar proyecto ──" + clReset)
 	fmt.Println()
 
 	name, err := prompt(reader, "Nombre del proyecto (ej: echo)")
@@ -138,13 +142,13 @@ func runProjectAdd(_ []string) error {
 		return fmt.Errorf("error guardando proyecto: %w", err)
 	}
 
-	fmt.Printf("\n✓ Proyecto '%s' guardado\n", name)
+	fmt.Printf("\n"+clGreen+"✓"+clReset+" Proyecto '%s' guardado\n", name)
 	return nil
 }
 
 func runProjectDefault(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("uso: deploy-doc project default <nombre>")
+		return fmt.Errorf("uso: gtt project default <nombre>")
 	}
 	name := args[0]
 
@@ -154,7 +158,7 @@ func runProjectDefault(args []string) error {
 	}
 
 	if _, ok := cfg.Projects[name]; !ok {
-		return fmt.Errorf("proyecto '%s' no encontrado. Usa: deploy-doc project list", name)
+		return fmt.Errorf("proyecto '%s' no encontrado. Usa: gtt project list", name)
 	}
 
 	cfg.DefaultProject = name
@@ -162,13 +166,13 @@ func runProjectDefault(args []string) error {
 		return fmt.Errorf("error guardando configuración: %w", err)
 	}
 
-	fmt.Printf("✓ Proyecto por defecto cambiado a '%s'\n", name)
+	fmt.Printf(clGreen+"✓"+clReset+" Proyecto por defecto cambiado a "+clBold+"'%s'"+clReset+"\n", name)
 	return nil
 }
 
 func runProjectRemove(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("uso: deploy-doc project remove <nombre>")
+		return fmt.Errorf("uso: gtt project remove <nombre>")
 	}
 	name := args[0]
 
@@ -178,7 +182,7 @@ func runProjectRemove(args []string) error {
 	}
 
 	if _, ok := cfg.Projects[name]; !ok {
-		return fmt.Errorf("proyecto '%s' no encontrado. Usa: deploy-doc project list", name)
+		return fmt.Errorf("proyecto '%s' no encontrado. Usa: gtt project list", name)
 	}
 
 	reader := bufio.NewReader(os.Stdin)
@@ -194,32 +198,29 @@ func runProjectRemove(args []string) error {
 
 	if cfg.DefaultProject == name {
 		cfg.DefaultProject = ""
-		fmt.Printf("Advertencia: '%s' era el proyecto por defecto. Usa: deploy-doc project default <nombre>\n", name)
+		warnLine(fmt.Sprintf("'%s' era el proyecto por defecto. Usa: gtt project default <nombre>", name))
 	}
 
 	if err := config.Save(cfg); err != nil {
 		return fmt.Errorf("error guardando configuración: %w", err)
 	}
 
-	fmt.Printf("✓ Proyecto '%s' eliminado\n", name)
+	fmt.Printf(clGreen+"✓"+clReset+" Proyecto '%s' eliminado\n", name)
 	return nil
 }
 
 func printProjectUsage() {
-	fmt.Println(`deploy-doc project - Gestiona proyectos configurados
-
-Uso:
-  deploy-doc project <subcomando> [opciones]
-
-Subcomandos:
-  list              Lista los proyectos configurados
-  add               Agrega un nuevo proyecto (asistente interactivo)
-  default <nombre>  Cambia el proyecto por defecto
-  remove <nombre>   Elimina un proyecto
-
-Ejemplos:
-  deploy-doc project list
-  deploy-doc project add
-  deploy-doc project default echo
-  deploy-doc project remove ecuapass`)
+	fmt.Printf(clCyan + clBold + "gtt project" + clReset + " — Gestiona proyectos configurados\n\n")
+	fmt.Print(clBold + "Uso:\n" + clReset)
+	fmt.Print("  gtt project <subcomando> [opciones]\n\n")
+	fmt.Print(clBold + "Subcomandos:\n" + clReset)
+	fmt.Print("  list, ls          Lista los proyectos configurados\n")
+	fmt.Print("  add               Agrega un nuevo proyecto (asistente interactivo)\n")
+	fmt.Print("  default <nombre>  Cambia el proyecto por defecto\n")
+	fmt.Print("  remove <nombre>   Elimina un proyecto\n\n")
+	fmt.Print(clBold + "Ejemplos:\n" + clReset)
+	fmt.Print("  gtt project list\n")
+	fmt.Print("  gtt project add\n")
+	fmt.Print("  gtt project default echo\n")
+	fmt.Print("  gtt project remove ecuapass\n")
 }

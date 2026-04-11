@@ -16,7 +16,7 @@ import (
 )
 
 func runGenerate(args []string) error {
-	// --- Parse flags ---
+	// --- Parse flags (short and long forms) ---
 	flags := parseFlags(args)
 
 	issue := flags["--issue"]
@@ -26,10 +26,10 @@ func runGenerate(args []string) error {
 	_, dryRun := flags["--dry-run"]
 
 	if issue == "" {
-		return fmt.Errorf("--issue es requerido. Ej: deploy-doc generate --issue APP-1999")
+		return fmt.Errorf("--issue / -i es requerido. Ej: gtt g -i APP-1999")
 	}
 	if commitBackend == "" && commitFrontend == "" {
-		return fmt.Errorf("debes proveer al menos --commit-backend o --commit-frontend")
+		return fmt.Errorf("debes proveer al menos --commit-backend (-b) o --commit-frontend (-f)")
 	}
 
 	backendHashes := splitHashes(commitBackend)
@@ -62,31 +62,32 @@ func runGenerate(args []string) error {
 			frontendRepo = proj.FrontendRepo
 		}
 		if resolvedName != "" {
-			fmt.Printf("Proyecto: %s\n", resolvedName)
+			fmt.Printf(clBold+"Proyecto: "+clReset+clCyan+"%s"+clReset+"\n\n", resolvedName)
 		}
 	}
 
 	// Warn if commit provided but no path configured for that side
 	if len(backendHashes) > 0 && proj != nil && proj.BackendPath == "" {
-		fmt.Println("Advertencia: el proyecto no tiene backend_path configurado. Git correra en el directorio actual.")
+		warnLine("el proyecto no tiene backend_path configurado. Git correrá en el directorio actual.")
 	}
 	if len(frontendHashes) > 0 && proj != nil && proj.FrontendPath == "" {
-		fmt.Println("Advertencia: el proyecto no tiene frontend_path configurado. Git correra en el directorio actual.")
+		warnLine("el proyecto no tiene frontend_path configurado. Git correrá en el directorio actual.")
 	}
 
 	client := atlassian.NewClient(cfg.BaseURL, cfg.AtlassianEmail, cfg.AtlassianToken)
 	reader := bufio.NewReader(os.Stdin)
 
-	// --- Get Jira issue ---
-	fmt.Printf("Buscando issue %s...\n", issue)
+	// --- [1/4] Get Jira issue ---
+	stepLabel(1, 4, fmt.Sprintf("Buscando issue %s...", clr(clBold, issue)))
 	jiraIssue, err := client.GetIssue(issue)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("✓ %s - %s\n\n", jiraIssue.Key, jiraIssue.Summary)
+	okLine(fmt.Sprintf("%s — %s", clr(clBold, jiraIssue.Key), jiraIssue.Summary))
+	fmt.Println()
 
-	// --- Check for existing deploy doc ---
-	fmt.Printf("Verificando documentos existentes para %s...\n", issue)
+	// --- [2/4] Check for existing deploy doc ---
+	stepLabel(2, 4, "Verificando documentos existentes...")
 	existingDoc, err := client.FindDeployDocByIssue(issue)
 	if err != nil {
 		return err
@@ -94,10 +95,12 @@ func runGenerate(args []string) error {
 
 	var updateExisting bool
 	if existingDoc != nil {
-		fmt.Printf("\nYa existe un documento de despliegue para %s:\n", issue)
-		fmt.Printf("  Título: %s\n", existingDoc.Title)
-		fmt.Printf("  URL:    %s\n\n", existingDoc.WebURL)
-		fmt.Print("¿Qué deseas hacer?\n  [1] Actualizar el documento existente\n  [2] Crear uno nuevo de todas formas\n  [3] Cancelar\n\nOpción: ")
+		warnLine(fmt.Sprintf("Ya existe un documento para %s:", issue))
+		fmt.Printf("        Título : %s\n", existingDoc.Title)
+		fmt.Printf("        URL    : %s\n", clr(clCyan, existingDoc.WebURL))
+		fmt.Printf("\n  %s Actualizar    %s Crear nuevo    %s Cancelar\n",
+			clr(clBold+clGreen, "[1]"), clr(clBold+clYellow, "[2]"), clr(clBold+clRed, "[3]"))
+		fmt.Print("  Opción: ")
 		choice, _ := reader.ReadString('\n')
 		choice = strings.TrimSpace(choice)
 		switch choice {
@@ -109,35 +112,37 @@ func runGenerate(args []string) error {
 			fmt.Println("Cancelado.")
 			return nil
 		}
+	} else {
+		okLine("Ninguno encontrado")
 	}
+	fmt.Println()
 
-	// --- Get changed files ---
+	// --- [3/4] Get changed files ---
+	stepLabel(3, 4, "Leyendo commits...")
 	var backendFiles, frontendFiles map[string][]string
 	var commitErrors []string
 
 	if len(backendHashes) > 0 {
 		label := strings.Join(backendHashes, ", ")
-		fmt.Printf("Leyendo commits backend [%s]...\n", label)
 		files, err := getFilesForCommits(backendHashes, backendWorkDir)
 		if err != nil {
-			fmt.Printf("✗ Backend: %v\n\n", err)
+			errLine(fmt.Sprintf("backend [%s]: %v", label, err))
 			commitErrors = append(commitErrors, fmt.Sprintf("backend: %v", err))
 		} else {
 			backendFiles = git.GroupByDirectory(files)
-			fmt.Printf("✓ %d archivos encontrados\n\n", len(files))
+			okLine(fmt.Sprintf("backend  %s  → %s archivos", clr(clBold, label), clr(clGreen, fmt.Sprintf("%d", len(files)))))
 		}
 	}
 
 	if len(frontendHashes) > 0 {
 		label := strings.Join(frontendHashes, ", ")
-		fmt.Printf("Leyendo commits frontend [%s]...\n", label)
 		files, err := getFilesForCommits(frontendHashes, frontendWorkDir)
 		if err != nil {
-			fmt.Printf("✗ Frontend: %v\n\n", err)
+			errLine(fmt.Sprintf("frontend [%s]: %v", label, err))
 			commitErrors = append(commitErrors, fmt.Sprintf("frontend: %v", err))
 		} else {
 			frontendFiles = git.GroupByDirectory(files)
-			fmt.Printf("✓ %d archivos encontrados\n\n", len(files))
+			okLine(fmt.Sprintf("frontend %s  → %s archivos", clr(clBold, label), clr(clGreen, fmt.Sprintf("%d", len(files)))))
 		}
 	}
 
@@ -145,12 +150,11 @@ func runGenerate(args []string) error {
 	if len(commitErrors) > 0 && backendFiles == nil && frontendFiles == nil {
 		return fmt.Errorf("no se pudo leer ningún commit. Verifica que estás en el repositorio correcto y que los hashes son válidos")
 	}
-
 	// If only some failed, warn but continue with what we have
 	if len(commitErrors) > 0 {
-		fmt.Println("⚠ Advertencia: uno de los commits falló. El documento se creará solo con la información disponible.")
-		fmt.Println()
+		warnLine("uno de los commits falló. El documento se creará con la información disponible.")
 	}
+	fmt.Println()
 
 	// --- Build title and ADF ---
 	title := document.BuildTitle(jiraIssue.Key, jiraIssue.Summary)
@@ -177,10 +181,10 @@ func runGenerate(args []string) error {
 		return nil
 	}
 
-	// --- Update existing page ---
+	// --- [4/4] Update existing page ---
 	if updateExisting {
-		fmt.Printf("Título: %s\n", title)
-		fmt.Print("\n¿Confirmas la actualización? [S/n]: ")
+		fmt.Printf(clBold+"Título: "+clReset+"%s\n\n", title)
+		fmt.Print("¿Confirmas la actualización? [S/n]: ")
 		confirm, _ := reader.ReadString('\n')
 		confirm = strings.TrimSpace(strings.ToLower(confirm))
 		if confirm == "n" || confirm == "no" {
@@ -188,25 +192,22 @@ func runGenerate(args []string) error {
 			return nil
 		}
 
-		fmt.Println("Obteniendo versión actual del documento...")
+		stepLabel(4, 4, "Actualizando documento en Confluence...")
 		existingFull, err := client.GetPage(existingDoc.ID)
 		if err != nil {
 			return err
 		}
-
-		fmt.Println("Actualizando documento en Confluence...")
 		page, err := client.UpdatePage(existingFull.ID, title, existingFull.Version, adf)
 		if err != nil {
 			return err
 		}
-
-		fmt.Printf("\n✓ Documento actualizado exitosamente!\n")
-		fmt.Printf("  %s\n", page.WebURL)
+		okLine(clr(clGreen+clBold, "Documento actualizado!"))
+		fmt.Printf("\n  %s\n\n", clr(clCyan, page.WebURL))
 		return nil
 	}
 
-	// --- Find last deploy doc for location ---
-	fmt.Println("Buscando tus documentos de despliegue recientes...")
+	// --- [4/4] Find location and create ---
+	stepLabel(4, 4, "Seleccionando ubicación en Confluence...")
 	pages, err := client.FindLastDeployDoc()
 	if err != nil {
 		return err
@@ -215,14 +216,12 @@ func runGenerate(args []string) error {
 		return fmt.Errorf("no se encontraron documentos de despliegue previos. Crea uno manualmente primero como referencia")
 	}
 
-	// --- Show options to user ---
-	fmt.Print("\n¿Dónde deseas crear el documento? Selecciona una opción:\n\n")
+	fmt.Println()
 	for i, p := range pages {
-		fmt.Printf("  [%d] %s\n", i+1, p.Title)
-		fmt.Printf("      %s\n\n", p.WebURL)
+		fmt.Printf("  %s %s\n", clr(clBold+clYellow, fmt.Sprintf("[%d]", i+1)), p.Title)
+		fmt.Printf("      %s\n", clr(clCyan, p.WebURL))
 	}
-
-	fmt.Printf("Opción (1-%d): ", len(pages))
+	fmt.Printf("\n  Opción (1-%d): ", len(pages))
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 
@@ -232,18 +231,13 @@ func runGenerate(args []string) error {
 	}
 	selected := pages[n-1]
 
-	// --- Get parent page of selected doc ---
-	fmt.Printf("\nObteniendo ubicación de '%s'...\n", selected.Title)
 	selectedPage, err := client.GetPage(selected.ID)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("✓ El nuevo documento se creará en el mismo lugar\n\n")
-
-	// --- Confirm ---
-	fmt.Printf("Título: %s\n", title)
-	fmt.Print("\n¿Confirmas la creación? [S/n]: ")
+	fmt.Printf("\n"+clBold+"Título: "+clReset+"%s\n\n", title)
+	fmt.Print("¿Confirmas la creación? [S/n]: ")
 	confirm, _ := reader.ReadString('\n')
 	confirm = strings.TrimSpace(strings.ToLower(confirm))
 	if confirm == "n" || confirm == "no" {
@@ -251,15 +245,12 @@ func runGenerate(args []string) error {
 		return nil
 	}
 
-	// --- Create page ---
-	fmt.Println("Creando documento en Confluence...")
 	page, err := client.CreatePage(selectedPage.SpaceID, selectedPage.ParentID, title, adf)
 	if err != nil {
 		return err
 	}
-
-	fmt.Printf("\n✓ Documento creado exitosamente!\n")
-	fmt.Printf("  %s\n", page.WebURL)
+	okLine(clr(clGreen+clBold, "Documento creado!"))
+	fmt.Printf("\n  %s\n\n", clr(clCyan, page.WebURL))
 	return nil
 }
 
@@ -287,13 +278,39 @@ func splitHashes(raw string) []string {
 	return out
 }
 
-// parseFlags parses --key value and --key=value style args into a map.
+// shortFlags maps short flags to their canonical long form.
+var shortFlags = map[string]string{
+	"-i": "--issue",
+	"-b": "--commit-backend",
+	"-f": "--commit-frontend",
+	"-p": "--project",
+}
+
+// parseFlags parses --key value, --key=value, -k value, and -k=value args into a map.
 // Boolean flags (no value) are stored with an empty string value.
 func parseFlags(args []string) map[string]string {
+	// Normalize short flags to long form before parsing.
+	normalized := make([]string, len(args))
+	for i, a := range args {
+		if !strings.HasPrefix(a, "--") && strings.HasPrefix(a, "-") {
+			if idx := strings.IndexByte(a, '='); idx != -1 {
+				short := a[:idx]
+				if long, ok := shortFlags[short]; ok {
+					normalized[i] = long + a[idx:] // -i=VAL → --issue=VAL
+					continue
+				}
+			} else if long, ok := shortFlags[a]; ok {
+				normalized[i] = long // -i → --issue
+				continue
+			}
+		}
+		normalized[i] = a
+	}
+
 	flags := make(map[string]string)
 	i := 0
-	for i < len(args) {
-		arg := args[i]
+	for i < len(normalized) {
+		arg := normalized[i]
 		if !strings.HasPrefix(arg, "--") {
 			i++
 			continue
@@ -302,9 +319,9 @@ func parseFlags(args []string) map[string]string {
 			// --flag=value form
 			flags[arg[:idx]] = arg[idx+1:]
 			i++
-		} else if i+1 < len(args) && !strings.HasPrefix(args[i+1], "--") {
+		} else if i+1 < len(normalized) && !strings.HasPrefix(normalized[i+1], "--") && !strings.HasPrefix(normalized[i+1], "-") {
 			// --flag value form
-			flags[arg] = args[i+1]
+			flags[arg] = normalized[i+1]
 			i += 2
 		} else {
 			// boolean flag with no value
