@@ -64,13 +64,19 @@ func qaConsolidatedTable(tasks []atlassian.QAIssue) map[string]any {
 		}),
 	}
 	for _, t := range tasks {
+		var obsCell map[string]any
+		if t.Observations != "" {
+			obsCell = tableCell(130, textNode(t.Observations))
+		} else {
+			obsCell = qaTableCellEmpty(130)
+		}
 		rows = append(rows, tableRow([]any{
 			tableCell(150, inlineCard(t.URL)),
 			tableCell(130, qaEmoji(!t.HasCodingErrors)),
 			tableCell(130, qaEmoji(!t.HasDevReturns)),
 			tableCell(130, qaEmoji(t.HasDeployDoc)),
 			tableCell(130, qaEmoji(t.PRMerged)),
-			qaTableCellEmpty(130),
+			obsCell,
 		}))
 	}
 	return table("default", 800, rows)

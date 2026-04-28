@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/geomark27/deploy-doc/internal/atlassian"
 	"github.com/geomark27/deploy-doc/internal/config"
 )
 
@@ -59,6 +60,32 @@ func runInit(args []string) error {
 
 	path, _ := config.ConfigPath()
 	fmt.Printf("\n"+clGreen+"✓"+clReset+" Configuración guardada en %s\n", path)
+
+	// Verify credentials work before proceeding — catches typos in email/token early.
+	client := atlassian.NewClient(cfg.BaseURL, cfg.AtlassianEmail, cfg.AtlassianToken)
+	user, err := client.Whoami()
+	if err != nil {
+		fmt.Printf("\n"+clRed+"✗"+clReset+" No se pudo validar credenciales: %s\n", err)
+		fmt.Println("  Revisa tu email y token, y vuelve a ejecutar 'gtt init'.")
+		return err
+	}
+	if !strings.EqualFold(user.EmailAddress, cfg.AtlassianEmail) {
+		fmt.Printf("\n"+clYellow+"⚠"+clReset+" El email ingresado (%s) no coincide con la cuenta autenticada (%s).\n",
+			cfg.AtlassianEmail, user.EmailAddress)
+		fmt.Println("  Atlassian aceptó el token pero las búsquedas pueden fallar silenciosamente.")
+		fmt.Print("  ¿Corregir el email a la cuenta autenticada? [S/n]: ")
+		ans, _ := reader.ReadString('\n')
+		ans = strings.TrimSpace(strings.ToLower(ans))
+		if ans == "" || ans == "s" || ans == "si" || ans == "sí" {
+			cfg.AtlassianEmail = user.EmailAddress
+			if err := config.Save(cfg); err != nil {
+				return fmt.Errorf("error guardando configuración: %w", err)
+			}
+			fmt.Printf(clGreen+"✓"+clReset+" Email corregido a %s\n", user.EmailAddress)
+		}
+	} else {
+		fmt.Printf(clGreen+"✓"+clReset+" Autenticado como %s (%s)\n", user.DisplayName, user.EmailAddress)
+	}
 
 	// --- Optional: configure first project ---
 	fmt.Println()

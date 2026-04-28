@@ -102,16 +102,9 @@ func filesTable(repoName, commitHash string, files map[string][]string) map[stri
 
 	repoURL := fmt.Sprintf("https://bitbucket.org/devtyt/%s", repoName)
 
-	for i, dir := range dirs {
+	for _, dir := range dirs {
 		fileNames := files[dir]
-
-		// Only show repo link on first row of each group
-		var serverCell map[string]any
-		if i == 0 {
-			serverCell = tableCell(69, linkNode(repoURL, repoName))
-		} else {
-			serverCell = tableCell(69, emptyParagraph())
-		}
+		serverCell := tableCell(69, linkNode(repoURL, repoName))
 
 		// Build file bullet list and link bullet list
 		fileItems := []any{}

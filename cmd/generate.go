@@ -201,6 +201,7 @@ func runGenerate(args []string) error {
 		if err != nil {
 			return err
 		}
+		_ = client.CreateJiraRemoteLink(issue, page.ID, page.WebURL, title)
 		okLine(clr(clGreen+clBold, "Documento actualizado!"))
 		fmt.Printf("\n  %s\n\n", clr(clCyan, page.WebURL))
 		return nil
@@ -249,6 +250,7 @@ func runGenerate(args []string) error {
 	if err != nil {
 		return err
 	}
+	_ = client.CreateJiraRemoteLink(issue, page.ID, page.WebURL, title)
 	okLine(clr(clGreen+clBold, "Documento creado!"))
 	fmt.Printf("\n  %s\n\n", clr(clCyan, page.WebURL))
 	return nil

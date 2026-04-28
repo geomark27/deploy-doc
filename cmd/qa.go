@@ -53,6 +53,12 @@ func runQA(args []string) error {
 	}
 	client := atlassian.NewClient(cfg.BaseURL, cfg.AtlassianEmail, cfg.AtlassianToken)
 
+	if _, err := client.VerifyCredentialsMatch(cfg.AtlassianEmail, func(msg string) {
+		warnLine(msg)
+	}); err != nil {
+		return fmt.Errorf("credenciales inválidas: %w. Ejecuta 'gtt init' para reconfigurar", err)
+	}
+
 	sprintName := fmt.Sprintf("%s_Sprint %d", module, sprint)
 	fmt.Printf(clBold+"Módulo : "+clReset+clCyan+"%s"+clReset+"\n", module)
 	fmt.Printf(clBold+"Sprint : "+clReset+clCyan+"%d"+clReset+"\n\n", sprint)
@@ -90,6 +96,11 @@ func runQA(args []string) error {
 	for i := range reviewTasks {
 		hasDoc, _ := client.HasDeployDocLink(reviewTasks[i].Key)
 		reviewTasks[i].HasDeployDoc = hasDoc
+
+		if reviewTasks[i].HasCodingErrors {
+			obs, _ := client.GetNovedadComment(reviewTasks[i].Key)
+			reviewTasks[i].Observations = obs
+		}
 
 		okLine(fmt.Sprintf("%-10s  %s %s %s %s",
 			reviewTasks[i].Key,
