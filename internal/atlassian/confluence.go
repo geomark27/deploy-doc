@@ -104,7 +104,7 @@ func (c *Client) GetPage(pageID string) (*Page, error) {
 
 // FindDeployDocByIssue searches for an existing deploy doc matching the given issue key.
 func (c *Client) FindDeployDocByIssue(issueKey string) (*Page, error) {
-	cql := url.QueryEscape(fmt.Sprintf(`title ~ "Documento de Despliegue" AND title ~ "%s" AND creator = currentUser()`, issueKey))
+	cql := url.QueryEscape(fmt.Sprintf(`title ~ "Documento de Despliegue" AND title ~ "%s" AND space = "PA"`, issueKey))
 	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=1", cql)
 
 	body, err := c.Get(path)
