@@ -278,58 +278,15 @@ func splitHashes(raw string) []string {
 	return out
 }
 
-// shortFlags maps short flags to their canonical long form.
-var shortFlags = map[string]string{
+var generateShortFlags = map[string]string{
 	"-i": "--issue",
 	"-b": "--commit-backend",
 	"-f": "--commit-frontend",
 	"-p": "--project",
 }
 
-// parseFlags parses --key value, --key=value, -k value, and -k=value args into a map.
-// Boolean flags (no value) are stored with an empty string value.
 func parseFlags(args []string) map[string]string {
-	// Normalize short flags to long form before parsing.
-	normalized := make([]string, len(args))
-	for i, a := range args {
-		if !strings.HasPrefix(a, "--") && strings.HasPrefix(a, "-") {
-			if idx := strings.IndexByte(a, '='); idx != -1 {
-				short := a[:idx]
-				if long, ok := shortFlags[short]; ok {
-					normalized[i] = long + a[idx:] // -i=VAL → --issue=VAL
-					continue
-				}
-			} else if long, ok := shortFlags[a]; ok {
-				normalized[i] = long // -i → --issue
-				continue
-			}
-		}
-		normalized[i] = a
-	}
-
-	flags := make(map[string]string)
-	i := 0
-	for i < len(normalized) {
-		arg := normalized[i]
-		if !strings.HasPrefix(arg, "--") {
-			i++
-			continue
-		}
-		if idx := strings.IndexByte(arg, '='); idx != -1 {
-			// --flag=value form
-			flags[arg[:idx]] = arg[idx+1:]
-			i++
-		} else if i+1 < len(normalized) && !strings.HasPrefix(normalized[i+1], "--") && !strings.HasPrefix(normalized[i+1], "-") {
-			// --flag value form
-			flags[arg] = normalized[i+1]
-			i += 2
-		} else {
-			// boolean flag with no value
-			flags[arg] = ""
-			i++
-		}
-	}
-	return flags
+	return parseFlagsWithShorts(args, generateShortFlags)
 }
 
 // getFilesForCommits runs git show for one or more commits in the given workDir.

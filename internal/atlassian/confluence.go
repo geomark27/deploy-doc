@@ -202,6 +202,61 @@ func (c *Client) UpdatePage(pageID, title string, currentVersion int, adfBody ma
 	}, nil
 }
 
+// FindQAPage searches for an existing QA consolidated page for the given module and sprint.
+func (c *Client) FindQAPage(module string, sprint int) (*Page, error) {
+	title := fmt.Sprintf("Consolidado de Pruebas QA - %s - Sprint %d", module, sprint)
+	cql := url.QueryEscape(fmt.Sprintf(`title = "%s"`, title))
+	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=1", cql)
+
+	body, err := c.Get(path)
+	if err != nil {
+		return nil, fmt.Errorf("error buscando página QA: %w", err)
+	}
+
+	var result searchResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("error parseando respuesta: %w", err)
+	}
+
+	if len(result.Results) == 0 {
+		return nil, nil
+	}
+
+	r := result.Results[0]
+	return &Page{
+		ID:     r.Content.ID,
+		Title:  r.Content.Title,
+		WebURL: c.BaseURL + "/wiki" + r.Content.Links.WebUI,
+	}, nil
+}
+
+// FindLastQAPage finds the most recently created QA consolidated page for the given module.
+func (c *Client) FindLastQAPage(module string) (*Page, error) {
+	cql := url.QueryEscape(fmt.Sprintf(`title ~ "Consolidado de Pruebas QA - %s" ORDER BY created DESC`, module))
+	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=1", cql)
+
+	body, err := c.Get(path)
+	if err != nil {
+		return nil, fmt.Errorf("error buscando página QA de referencia: %w", err)
+	}
+
+	var result searchResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("error parseando respuesta: %w", err)
+	}
+
+	if len(result.Results) == 0 {
+		return nil, nil
+	}
+
+	r := result.Results[0]
+	return &Page{
+		ID:     r.Content.ID,
+		Title:  r.Content.Title,
+		WebURL: c.BaseURL + "/wiki" + r.Content.Links.WebUI,
+	}, nil
+}
+
 // marshalADF serializes the ADF document to a JSON string.
 func marshalADF(v any) (string, error) {
 	b, err := json.Marshal(v)
