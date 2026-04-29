@@ -22,6 +22,7 @@ type Config struct {
 	AtlassianEmail string                    `yaml:"atlassian_email"`
 	AtlassianToken string                    `yaml:"atlassian_token"`
 	BaseURL        string                    `yaml:"base_url"`
+	QAEmail        string                    `yaml:"qa_email,omitempty"`
 	DefaultProject string                    `yaml:"default_project,omitempty"`
 	Projects       map[string]*ProjectConfig `yaml:"projects,omitempty"`
 }
@@ -48,6 +49,9 @@ func Load() (*Config, error) {
 			}
 			if cfg.DefaultProject == "" {
 				cfg.DefaultProject = fileCfg.DefaultProject
+			}
+			if cfg.QAEmail == "" {
+				cfg.QAEmail = fileCfg.QAEmail
 			}
 			if cfg.Projects == nil {
 				cfg.Projects = fileCfg.Projects

@@ -10,11 +10,14 @@ import (
 type QAIssue struct {
 	Key             string
 	URL             string
+	Summary         string
 	HasCodingErrors bool   // Contador de novedades (customfield_10498) > 0
 	HasDevReturns   bool   // Conteo de reprocesos (customfield_10134) > 0
 	HasDeployDoc    bool   // has a remote link titled "Documento de Despliegue..."
 	PRMerged        bool   // PR state = MERGED (customfield_10000)
 	Observations    string // text after "::" in comments matching "Novedad::"
+	ReviewTaskKey   string // QA review task key (e.g. APP-2160)
+	ReviewTaskURL   string // QA review task URL
 }
 
 type jiraSearchResponse struct {
@@ -24,23 +27,81 @@ type jiraSearchResponse struct {
 	} `json:"issues"`
 }
 
-// GetQATasksForReview returns sprint tasks in Testing (10002) or En Revisión (10003) for the given module.
-// Status IDs are used because the JQL name for "Pruebas" is "Testing" — filtering by display name fails.
+// GetQATasksForReview returns sprint dev tasks that have reached or passed through QA for the given module.
+// Excludes QA review tasks (summary starts with "Revisión de Tarea").
+// Includes Testing (10002), En Revisión (10003), Finalizada (10001) and Pase a Producción (10004).
 func (c *Client) GetQATasksForReview(sprintName, module string) ([]QAIssue, error) {
 	jql := fmt.Sprintf(
-		`project = APP AND sprint = "%s" AND status in (10002, 10003) AND component = "%s" ORDER BY key ASC`,
+		`project = APP AND sprint = "%s" AND status in (10001, 10002, 10003, 10004) AND component = "%s" ORDER BY key ASC`,
 		sprintName, module,
+	)
+	all, err := c.searchQAIssues(jql)
+	if err != nil {
+		return nil, err
+	}
+	dev := make([]QAIssue, 0, len(all))
+	for _, t := range all {
+		if !strings.HasPrefix(strings.ToLower(t.Summary), "revisión de tarea") &&
+			!strings.HasPrefix(strings.ToLower(t.Summary), "revision de tarea") {
+			dev = append(dev, t)
+		}
+	}
+	return dev, nil
+}
+
+// GetQATasksAsAssignee returns sprint tasks assigned to the given email (or currentUser() if empty).
+// Resolves the email to an accountId first since Jira Cloud JQL requires accountId, not email.
+func (c *Client) GetQATasksAsAssignee(sprintName, qaEmail string) ([]QAIssue, error) {
+	assignee := "currentUser()"
+	if qaEmail != "" {
+		accountID, err := c.resolveAccountID(qaEmail)
+		if err == nil && accountID != "" {
+			assignee = fmt.Sprintf("%q", accountID)
+		}
+	}
+	jql := fmt.Sprintf(
+		`project = APP AND sprint = "%s" AND assignee = %s ORDER BY key ASC`,
+		sprintName, assignee,
 	)
 	return c.searchQAIssues(jql)
 }
 
-// GetQATasksAsAssignee returns sprint tasks where the current user is the assignee.
-func (c *Client) GetQATasksAsAssignee(sprintName string) ([]QAIssue, error) {
-	jql := fmt.Sprintf(
-		`project = APP AND sprint = "%s" AND assignee = currentUser() ORDER BY key ASC`,
-		sprintName,
-	)
-	return c.searchQAIssues(jql)
+// BuildReviewMap builds a map of devTaskKey → QAIssue from a list of QA review tasks.
+// QA review tasks follow the pattern "Revisión de Tarea - APP-XXXX".
+func BuildReviewMap(qaTasks []QAIssue) map[string]QAIssue {
+	m := make(map[string]QAIssue, len(qaTasks))
+	for _, t := range qaTasks {
+		if key := parseDevTaskKey(t.Summary); key != "" {
+			m[key] = t
+		}
+	}
+	return m
+}
+
+// parseDevTaskKey extracts the dev task key from a QA review task summary.
+// e.g. "Revisión de Tarea - APP-1257" → "APP-1257"
+func parseDevTaskKey(summary string) string {
+	parts := strings.Split(summary, "-")
+	if len(parts) < 2 {
+		return ""
+	}
+	key := strings.TrimSpace(parts[len(parts)-2]) + "-" + strings.TrimSpace(parts[len(parts)-1])
+	return key
+}
+
+// resolveAccountID looks up the Jira accountId for a given email address.
+func (c *Client) resolveAccountID(email string) (string, error) {
+	body, err := c.Get(fmt.Sprintf("/rest/api/3/user/search?query=%s", strings.ReplaceAll(email, "@", "%40")))
+	if err != nil {
+		return "", err
+	}
+	var users []struct {
+		AccountID string `json:"accountId"`
+	}
+	if err := json.Unmarshal(body, &users); err != nil || len(users) == 0 {
+		return "", fmt.Errorf("usuario no encontrado: %s", email)
+	}
+	return users[0].AccountID, nil
 }
 
 func (c *Client) searchQAIssues(jql string) ([]QAIssue, error) {
@@ -65,6 +126,11 @@ func (c *Client) searchQAIssues(jql string) ([]QAIssue, error) {
 		qi := QAIssue{
 			Key: raw.Key,
 			URL: fmt.Sprintf("%s/browse/%s", c.BaseURL, raw.Key),
+		}
+		if v, ok := raw.Fields["summary"]; ok && v != nil {
+			if s, ok := v.(string); ok {
+				qi.Summary = s
+			}
 		}
 		if v, ok := raw.Fields["customfield_10498"]; ok && v != nil {
 			if n, ok := v.(float64); ok && n > 0 {

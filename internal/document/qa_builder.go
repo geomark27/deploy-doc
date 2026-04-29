@@ -39,11 +39,23 @@ func BuildQATitle(module string, sprint int) string {
 }
 
 func qaInfoTable(sprint int) map[string]any {
-	today := time.Now().Format("2006-01-02")
-	return table("default", 760, []any{
+	today := time.Now().Format("02 Jan 2006")
+	return table("full-width", 760, []any{
 		tableRow([]any{
 			tableHeader(200, textNode("Fechas de Revisión")),
 			tableCell(560, textNode(today)),
+		}),
+		tableRow([]any{
+			tableHeader(200, textNode("Líder Técnico")),
+			tableCell(560, textNode("Andrés Gavilanes C.")),
+		}),
+		tableRow([]any{
+			tableHeader(200, textNode("PMO")),
+			tableCell(560, textNode("Aldo A. Padilla")),
+		}),
+		tableRow([]any{
+			tableHeader(200, textNode("QA")),
+			tableCell(560, textNode("Eliana Lissette Veliz Galarza")),
 		}),
 		tableRow([]any{
 			tableHeader(200, textNode("Sprint")),
@@ -56,14 +68,21 @@ func qaConsolidatedTable(tasks []atlassian.QAIssue) map[string]any {
 	rows := []any{
 		tableRow([]any{
 			tableHeader(150, textNode("Tarea")),
-			tableHeader(130, textNode("Sin errores Codificación")),
-			tableHeader(130, textNode("Sin devolución desarrollo")),
-			tableHeader(130, textNode("Documentación requerida")),
-			tableHeader(130, textNode("Pull Request Aprobado")),
+			tableHeader(120, textNode("Sin errores Codificación")),
+			tableHeader(120, textNode("Sin devolución desarrollo")),
+			tableHeader(120, textNode("Documentación requerida")),
+			tableHeader(120, textNode("Pull Request Aprobado")),
 			tableHeader(130, textNode("Observaciones")),
+			tableHeader(130, textNode("Tarea de Revisión")),
 		}),
 	}
 	for _, t := range tasks {
+		var reviewCell map[string]any
+		if t.ReviewTaskURL != "" {
+			reviewCell = tableCell(130, inlineCard(t.ReviewTaskURL))
+		} else {
+			reviewCell = qaTableCellEmpty(130)
+		}
 		var obsCell map[string]any
 		if t.Observations != "" {
 			obsCell = tableCell(130, textNode(t.Observations))
@@ -72,41 +91,26 @@ func qaConsolidatedTable(tasks []atlassian.QAIssue) map[string]any {
 		}
 		rows = append(rows, tableRow([]any{
 			tableCell(150, inlineCard(t.URL)),
-			tableCell(130, qaEmoji(!t.HasCodingErrors)),
-			tableCell(130, qaEmoji(!t.HasDevReturns)),
-			tableCell(130, qaEmoji(t.HasDeployDoc)),
-			tableCell(130, qaEmoji(t.PRMerged)),
+			tableCell(120, qaEmoji(!t.HasCodingErrors)),
+			tableCell(120, qaEmoji(!t.HasDevReturns)),
+			tableCell(120, qaEmoji(t.HasDeployDoc)),
+			tableCell(120, qaEmoji(t.PRMerged)),
 			obsCell,
+			reviewCell,
 		}))
 	}
-	return table("default", 800, rows)
+	return table("full-width", 800, rows)
 }
 
-func qaResumenTable(totalTasks int, qaTasks []atlassian.QAIssue) map[string]any {
-	obsContent := make([]any, 0, len(qaTasks))
-	for _, t := range qaTasks {
-		obsContent = append(obsContent, inlineCard(t.URL))
-	}
-
-	var obsParagraph map[string]any
-	if len(obsContent) > 0 {
-		obsParagraph = map[string]any{"type": "paragraph", "content": obsContent}
-	} else {
-		obsParagraph = emptyParagraph()
-	}
-
-	return table("default", 760, []any{
+func qaResumenTable(totalTasks int, _ []atlassian.QAIssue) map[string]any {
+	return table("full-width", 760, []any{
 		tableRow([]any{
 			tableHeader(200, textNode("Total de Tareas")),
 			tableHeader(560, textNode("Observación")),
 		}),
 		tableRow([]any{
 			tableCell(200, textNode(fmt.Sprintf("%d", totalTasks))),
-			map[string]any{
-				"type":    "tableCell",
-				"attrs":   map[string]any{"colwidth": []int{560}},
-				"content": []any{obsParagraph},
-			},
+			qaTableCellEmpty(560),
 		}),
 	})
 }

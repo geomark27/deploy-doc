@@ -53,10 +53,16 @@ func runQA(args []string) error {
 	}
 	client := atlassian.NewClient(cfg.BaseURL, cfg.AtlassianEmail, cfg.AtlassianToken)
 
-	if _, err := client.VerifyCredentialsMatch(cfg.AtlassianEmail, func(msg string) {
+	me, err := client.VerifyCredentialsMatch(cfg.AtlassianEmail, func(msg string) {
 		warnLine(msg)
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("credenciales inválidas: %w. Ejecuta 'gtt init' para reconfigurar", err)
+	}
+	if os.Getenv("GTT_DEV") != "1" {
+		if cfg.QAEmail == "" || !strings.EqualFold(me.EmailAddress, cfg.QAEmail) {
+			return fmt.Errorf("acceso denegado: este comando es exclusivo para el usuario QA configurado en qa_email")
+		}
 	}
 
 	sprintName := fmt.Sprintf("%s_Sprint %d", module, sprint)
@@ -70,7 +76,7 @@ func runQA(args []string) error {
 	if err != nil {
 		return err
 	}
-	qaTasks, err := client.GetQATasksAsAssignee(sprintName)
+	qaTasks, err := client.GetQATasksAsAssignee(sprintName, cfg.QAEmail)
 	if err != nil {
 		return err
 	}
@@ -85,6 +91,14 @@ func runQA(args []string) error {
 
 	// [2/3] Evaluate deploy-doc links per task
 	stepLabel(2, 3, "Evaluando columnas por tarea...")
+
+	reviewMap := atlassian.BuildReviewMap(qaTasks)
+	for i := range reviewTasks {
+		if qa, ok := reviewMap[reviewTasks[i].Key]; ok {
+			reviewTasks[i].ReviewTaskKey = qa.Key
+			reviewTasks[i].ReviewTaskURL = qa.URL
+		}
+	}
 
 	check := func(v bool) string {
 		if v {
@@ -158,13 +172,31 @@ func runQA(args []string) error {
 		return nil
 	}
 
-	// New page — find a reference page for parentID/spaceID
-	okLine("página nueva — buscando referencia de ubicación...")
-	refPage, err := client.FindLastQAPage(module)
-	if err != nil || refPage == nil {
-		return fmt.Errorf("no se encontró una página QA de referencia. Crea 'Consolidado de Pruebas QA - %s - Sprint N' manualmente en Confluence primero", module)
+	// New page — ask user to confirm sibling reference for parentID/spaceID
+	stepLabel(3, 3, fmt.Sprintf("Seleccionando ubicación para %s en Confluence...", module))
+	candidates, err := client.FindQAPagesForModule(module)
+	if err != nil {
+		return err
 	}
-	ref, err := client.GetPage(refPage.ID)
+	if len(candidates) == 0 {
+		return fmt.Errorf("no se encontró ninguna página QA para el módulo '%s'. Crea 'Consolidado de Pruebas QA - %s - Sprint N' manualmente en Confluence primero", module, module)
+	}
+
+	fmt.Println()
+	for i, p := range candidates {
+		fmt.Printf("  %s %s\n", clr(clBold+clYellow, fmt.Sprintf("[%d]", i+1)), p.Title)
+		fmt.Printf("      %s\n", clr(clCyan, p.WebURL))
+	}
+	fmt.Printf("\n  Opción (1-%d): ", len(candidates))
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	n, convErr := strconv.Atoi(input)
+	if convErr != nil || n < 1 || n > len(candidates) {
+		return fmt.Errorf("opción inválida")
+	}
+	selected := candidates[n-1]
+
+	ref, err := client.GetPage(selected.ID)
 	if err != nil {
 		return err
 	}
