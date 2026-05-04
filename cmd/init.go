@@ -41,17 +41,31 @@ func runInit(args []string) error {
 		return err
 	}
 
+	baseURL, err := prompt(reader, "Atlassian base URL (ej: https://empresa.atlassian.net)")
+	if err != nil {
+		return err
+	}
+
+	spaceKey, err := promptOptional(reader, "Confluence space key por defecto (ej: PA, ADN)")
+	if err != nil {
+		return err
+	}
+
 	// Load existing config to preserve projects if any
 	existing, _ := config.Load()
 
 	cfg := &config.Config{
-		AtlassianEmail: email,
-		AtlassianToken: token,
-		BaseURL:        "https://torresytorres.atlassian.net",
+		AtlassianEmail:     email,
+		AtlassianToken:     token,
+		BaseURL:            baseURL,
+		ConfluenceSpaceKey: spaceKey,
 	}
 	if existing != nil {
 		cfg.DefaultProject = existing.DefaultProject
 		cfg.Projects = existing.Projects
+		if cfg.ConfluenceSpaceKey == "" {
+			cfg.ConfluenceSpaceKey = existing.ConfluenceSpaceKey
+		}
 	}
 
 	if err := config.Save(cfg); err != nil {
@@ -140,6 +154,15 @@ func configureProject(reader *bufio.Reader, cfg *config.Config) error {
 	if proj.BackendPath == "" && proj.FrontendPath == "" {
 		fmt.Println("No se configuraron rutas. Proyecto omitido.")
 		return nil
+	}
+
+	proj.VCSHost, err = promptOptional(reader, "Host del repositorio VCS (ej: https://bitbucket.org, https://github.com)")
+	if err != nil {
+		return err
+	}
+	proj.VCSOrg, err = promptOptional(reader, "Organización/workspace VCS (ej: devtyt)")
+	if err != nil {
+		return err
 	}
 
 	if cfg.Projects == nil {

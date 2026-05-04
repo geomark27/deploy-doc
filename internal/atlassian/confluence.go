@@ -103,9 +103,13 @@ func (c *Client) GetPage(pageID string) (*Page, error) {
 }
 
 // FindDeployDocByIssue searches for an existing deploy doc matching the given issue key.
-func (c *Client) FindDeployDocByIssue(issueKey string) (*Page, error) {
-	cql := url.QueryEscape(fmt.Sprintf(`title ~ "Documento de Despliegue" AND title ~ "%s" AND space = "PA"`, issueKey))
-	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=1", cql)
+// spaceKey restricts the search to a specific Confluence space; empty string searches all spaces.
+func (c *Client) FindDeployDocByIssue(issueKey, spaceKey string) (*Page, error) {
+	cqlBase := fmt.Sprintf(`title ~ "Documento de Despliegue" AND title ~ "%s"`, issueKey)
+	if spaceKey != "" {
+		cqlBase += fmt.Sprintf(` AND space = "%s"`, spaceKey)
+	}
+	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=1", url.QueryEscape(cqlBase))
 
 	body, err := c.Get(path)
 	if err != nil {
@@ -204,9 +208,13 @@ func (c *Client) UpdatePage(pageID, title string, currentVersion int, adfBody ma
 
 // FindQAPage searches for an existing QA consolidated page for the given module and sprint.
 // Uses the v2 pages API (direct DB lookup) instead of CQL search to avoid indexing delays.
-func (c *Client) FindQAPage(module string, sprint int) (*Page, error) {
+// spaceKey restricts the search to a specific space; empty string searches all spaces.
+func (c *Client) FindQAPage(module string, sprint int, spaceKey string) (*Page, error) {
 	title := fmt.Sprintf("Consolidado de Pruebas QA - %s - Sprint %d", module, sprint)
-	path := fmt.Sprintf("/wiki/api/v2/pages?title=%s&space-key=PA&limit=1", url.QueryEscape(title))
+	path := fmt.Sprintf("/wiki/api/v2/pages?title=%s&limit=1", url.QueryEscape(title))
+	if spaceKey != "" {
+		path += "&space-key=" + url.QueryEscape(spaceKey)
+	}
 
 	body, err := c.Get(path)
 	if err != nil {
@@ -234,9 +242,13 @@ func (c *Client) FindQAPage(module string, sprint int) (*Page, error) {
 
 // FindQAPagesForModule returns recent QA consolidated pages for the given module.
 // Used to let the user pick the sibling reference when creating a new sprint page.
-func (c *Client) FindQAPagesForModule(module string) ([]Page, error) {
-	cql := url.QueryEscape(fmt.Sprintf(`title ~ "Consolidado de Pruebas QA - %s" AND space = "PA" ORDER BY created DESC`, module))
-	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=5", cql)
+// spaceKey restricts the search to a specific space; empty string searches all spaces.
+func (c *Client) FindQAPagesForModule(module, spaceKey string) ([]Page, error) {
+	cqlBase := fmt.Sprintf(`title ~ "Consolidado de Pruebas QA - %s" ORDER BY created DESC`, module)
+	if spaceKey != "" {
+		cqlBase = fmt.Sprintf(`title ~ "Consolidado de Pruebas QA - %s" AND space = "%s" ORDER BY created DESC`, module, spaceKey)
+	}
+	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=5", url.QueryEscape(cqlBase))
 
 	body, err := c.Get(path)
 	if err != nil {

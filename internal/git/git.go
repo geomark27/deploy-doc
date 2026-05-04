@@ -17,7 +17,11 @@ type CommitFiles struct {
 // GetChangedFiles runs git show --name-only and returns the list of changed files.
 // workDir sets the working directory for git; empty string uses the current directory.
 func GetChangedFiles(commitHash, workDir string) ([]string, error) {
-	cmd := exec.Command("git", "show", "--name-only", "--format=", commitHash)
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		return nil, fmt.Errorf("git no encontrado en PATH: %w", err)
+	}
+	cmd := exec.Command(gitPath, "show", "--name-only", "--format=", commitHash)
 	if workDir != "" {
 		cmd.Dir = filepath.Clean(workDir)
 	}

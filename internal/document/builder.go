@@ -11,6 +11,8 @@ type DeployDoc struct {
 	IssueKey       string
 	IssueSummary   string
 	IssueURL       string
+	VCSHost        string // e.g. "https://bitbucket.org"
+	VCSOrg         string // e.g. "devtyt"
 	BackendRepo    string
 	BackendCommit  string
 	BackendFiles   map[string][]string // dir -> []filename
@@ -32,13 +34,13 @@ func Build(doc DeployDoc) map[string]any {
 	// Frontend table (only if there are frontend files)
 	if len(doc.FrontendFiles) > 0 {
 		content = append(content, heading(3, "Proyectos y formularios - Frontend:"))
-		content = append(content, filesTable(doc.FrontendRepo, doc.FrontendCommit, doc.FrontendFiles))
+		content = append(content, filesTable(doc.FrontendRepo, doc.FrontendCommit, doc.FrontendFiles, doc.VCSHost, doc.VCSOrg))
 	}
 
 	// Backend table (only if there are backend files)
 	if len(doc.BackendFiles) > 0 {
 		content = append(content, heading(3, "Proyectos y formularios - Backend:"))
-		content = append(content, filesTable(doc.BackendRepo, doc.BackendCommit, doc.BackendFiles))
+		content = append(content, filesTable(doc.BackendRepo, doc.BackendCommit, doc.BackendFiles, doc.VCSHost, doc.VCSOrg))
 	}
 
 	// A considerar section
@@ -81,7 +83,7 @@ func headerTable(issueKey, issueURL string) map[string]any {
 }
 
 // filesTable builds the files table for frontend or backend.
-func filesTable(repoName, commitHash string, files map[string][]string) map[string]any {
+func filesTable(repoName, commitHash string, files map[string][]string, vcsHost, vcsOrg string) map[string]any {
 	rows := []any{
 		// Header row
 		tableRow([]any{
@@ -100,11 +102,20 @@ func filesTable(repoName, commitHash string, files map[string][]string) map[stri
 	}
 	sort.Strings(dirs)
 
-	repoURL := fmt.Sprintf("https://bitbucket.org/devtyt/%s", repoName)
+	var repoURL string
+	if vcsHost != "" && vcsOrg != "" {
+		repoURL = fmt.Sprintf("%s/%s/%s", vcsHost, vcsOrg, repoName)
+	}
 
 	for _, dir := range dirs {
 		fileNames := files[dir]
-		serverCell := tableCell(69, linkNode(repoURL, repoName))
+
+		var serverCell map[string]any
+		if repoURL != "" {
+			serverCell = tableCell(69, linkNode(repoURL, repoName))
+		} else {
+			serverCell = tableCell(69, textNode(repoName))
+		}
 
 		// Build file bullet list and link bullet list
 		fileItems := []any{}
@@ -114,9 +125,13 @@ func filesTable(repoName, commitHash string, files map[string][]string) map[stri
 			if dir == "." {
 				filePath = fname
 			}
-			commitURL := fmt.Sprintf("%s/commits/%s#chg-%s", repoURL, commitHash, filePath)
 			fileItems = append(fileItems, bulletItem(textNode(fname)))
-			linkItems = append(linkItems, bulletItem(linkText("link", commitURL)))
+			if repoURL != "" {
+				commitURL := fmt.Sprintf("%s/commits/%s#chg-%s", repoURL, commitHash, filePath)
+				linkItems = append(linkItems, bulletItem(linkText("link", commitURL)))
+			} else {
+				linkItems = append(linkItems, bulletItem(textNode("—")))
+			}
 		}
 
 		rows = append(rows, tableRow([]any{

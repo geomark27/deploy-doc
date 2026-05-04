@@ -1,7 +1,10 @@
 package updater
 
 import (
+	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -88,16 +91,63 @@ func isNewer(candidate, base string) bool {
 	return cPat > bPat
 }
 
+// fetchExpectedHash downloads checksums.txt for the given release and returns
+// the SHA-256 hash for the named asset.
+func fetchExpectedHash(version, asset string) (string, error) {
+	checksumsURL := fmt.Sprintf(
+		"https://github.com/%s/releases/download/%s/checksums.txt", repo, version,
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumsURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("error HTTP %d al descargar checksums.txt", resp.StatusCode)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		parts := strings.Fields(scanner.Text())
+		if len(parts) >= 2 && parts[1] == asset {
+			return parts[0], nil
+		}
+	}
+	return "", fmt.Errorf("no se encontró el checksum para %s en checksums.txt", asset)
+}
+
 // SelfUpdate downloads the given version and replaces the running binary.
 // Returns migrated=true when the binary was renamed from deploy-doc → gtt.
 func SelfUpdate(latest string) (migrated bool, err error) {
-	url := fmt.Sprintf(
+	asset := assetName()
+
+	expectedHash, err := fetchExpectedHash(latest, asset)
+	if err != nil {
+		return false, fmt.Errorf("no se pudo obtener el checksum oficial: %w", err)
+	}
+
+	downloadURL := fmt.Sprintf(
 		"https://github.com/%s/releases/download/%s/%s",
-		repo, latest, assetName(),
+		repo, latest, asset,
 	)
 
 	fmt.Printf("Descargando %s...\n", latest)
-	resp, err := http.Get(url) //nolint:noctx
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return false, fmt.Errorf("error preparando descarga: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("error descargando: %w", err)
 	}
@@ -105,6 +155,16 @@ func SelfUpdate(latest string) (migrated bool, err error) {
 
 	if resp.StatusCode != http.StatusOK {
 		return false, fmt.Errorf("error HTTP %d al descargar el binario", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("error leyendo binario: %w", err)
+	}
+
+	actualHash := sha256.Sum256(data)
+	if hex.EncodeToString(actualHash[:]) != expectedHash {
+		return false, fmt.Errorf("verificación de integridad fallida: el hash del binario descargado no coincide con el publicado en el release")
 	}
 
 	exe, err := os.Executable()
@@ -120,7 +180,7 @@ func SelfUpdate(latest string) (migrated bool, err error) {
 	}
 	tmpName := tmp.Name()
 
-	_, copyErr := io.Copy(tmp, resp.Body)
+	_, copyErr := tmp.Write(data)
 	tmp.Close()
 	if copyErr != nil {
 		os.Remove(tmpName)

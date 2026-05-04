@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -23,6 +22,9 @@ func runGenerate(args []string) error {
 	commitBackend := flags["--commit-backend"]
 	commitFrontend := flags["--commit-frontend"]
 	projectName := flags["--project"]
+	spaceFlag := flags["--space"]
+	vcsHostFlag := flags["--vcs-host"]
+	vcsOrgFlag := flags["--vcs-org"]
 	_, dryRun := flags["--dry-run"]
 
 	if issue == "" {
@@ -47,10 +49,12 @@ func runGenerate(args []string) error {
 		return err
 	}
 
-	// Determine workDirs, repo names, and bitbucket org from project (or fallback defaults)
+	// Determine workDirs, repo names, and VCS info from project (or fallback defaults)
 	var backendWorkDir, frontendWorkDir string
 	backendRepo := "operativo-api"
 	frontendRepo := "echo-logistics"
+	vcsHost := vcsHostFlag
+	vcsOrg := vcsOrgFlag
 
 	if proj != nil {
 		backendWorkDir = proj.BackendPath
@@ -61,9 +65,37 @@ func runGenerate(args []string) error {
 		if proj.FrontendRepo != "" {
 			frontendRepo = proj.FrontendRepo
 		}
+		if vcsHost == "" && proj.VCSHost != "" {
+			vcsHost = proj.VCSHost
+		}
+		if vcsOrg == "" && proj.VCSOrg != "" {
+			vcsOrg = proj.VCSOrg
+		}
 		if resolvedName != "" {
 			fmt.Printf(clBold+"Proyecto: "+clReset+clCyan+"%s"+clReset+"\n\n", resolvedName)
 		}
+	}
+
+	if vcsHost == "" || vcsOrg == "" {
+		warnLine("VCS host/org no configurado. Los links del documento no serán clickeables. Configura vcs_host y vcs_org en tu proyecto con 'gtt init'.")
+	}
+
+	// Resolve Confluence space key: --space flag > project config > global config
+	spaceKey := spaceFlag
+	if spaceKey == "" && proj != nil && proj.ConfluenceSpaceKey != "" {
+		spaceKey = proj.ConfluenceSpaceKey
+	}
+	if spaceKey == "" {
+		spaceKey = cfg.ConfluenceSpaceKey
+	}
+	if spaceKey == "" {
+		return fmt.Errorf(
+			"Confluence space key no configurado.\n" +
+				"  Opción 1 (recomendada): agrega esta línea a ~/.config/deploy-doc/config.yaml:\n" +
+				"    confluence_space_key: PA\n" +
+				"  Opción 2: ejecuta 'gtt init' para reconfigurar todo\n" +
+				"  Opción 3: usa el flag en este comando: --space PA",
+		)
 	}
 
 	// Warn if commit provided but no path configured for that side
@@ -88,7 +120,7 @@ func runGenerate(args []string) error {
 
 	// --- [2/4] Check for existing deploy doc ---
 	stepLabel(2, 4, "Verificando documentos existentes...")
-	existingDoc, err := client.FindDeployDocByIssue(issue)
+	existingDoc, err := client.FindDeployDocByIssue(issue, spaceKey)
 	if err != nil {
 		return err
 	}
@@ -162,6 +194,8 @@ func runGenerate(args []string) error {
 		IssueKey:       jiraIssue.Key,
 		IssueSummary:   jiraIssue.Summary,
 		IssueURL:       jiraIssue.URL,
+		VCSHost:        vcsHost,
+		VCSOrg:         vcsOrg,
 		BackendRepo:    backendRepo,
 		BackendCommit:  firstHash(backendHashes),
 		BackendFiles:   backendFiles,
@@ -285,6 +319,7 @@ var generateShortFlags = map[string]string{
 	"-b": "--commit-backend",
 	"-f": "--commit-frontend",
 	"-p": "--project",
+	"-s": "--space",
 }
 
 func parseFlags(args []string) map[string]string {
@@ -293,9 +328,5 @@ func parseFlags(args []string) map[string]string {
 
 // getFilesForCommits runs git show for one or more commits in the given workDir.
 func getFilesForCommits(hashes []string, workDir string) ([]string, error) {
-	_, err := exec.LookPath("git")
-	if err != nil {
-		return nil, fmt.Errorf("git no encontrado en el sistema")
-	}
 	return git.GetChangedFilesMulti(hashes, workDir)
 }

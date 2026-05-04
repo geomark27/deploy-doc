@@ -10,52 +10,58 @@ import (
 
 // ProjectConfig holds the local paths and repo names for a project.
 type ProjectConfig struct {
-	BackendPath  string `yaml:"backend_path,omitempty"`
-	BackendRepo  string `yaml:"backend_repo,omitempty"`
-	FrontendPath string `yaml:"frontend_path,omitempty"`
-	FrontendRepo string `yaml:"frontend_repo,omitempty"`
+	BackendPath        string `yaml:"backend_path,omitempty"`
+	BackendRepo        string `yaml:"backend_repo,omitempty"`
+	FrontendPath       string `yaml:"frontend_path,omitempty"`
+	FrontendRepo       string `yaml:"frontend_repo,omitempty"`
+	VCSHost            string `yaml:"vcs_host,omitempty"`
+	VCSOrg             string `yaml:"vcs_org,omitempty"`
+	ConfluenceSpaceKey string `yaml:"confluence_space_key,omitempty"`
 }
 
 // Config holds all configuration needed by the CLI.
 // Priority: env vars > ~/.config/deploy-doc/config.yaml
 type Config struct {
-	AtlassianEmail string                    `yaml:"atlassian_email"`
-	AtlassianToken string                    `yaml:"atlassian_token"`
-	BaseURL        string                    `yaml:"base_url"`
-	QAEmail        string                    `yaml:"qa_email,omitempty"`
-	DefaultProject string                    `yaml:"default_project,omitempty"`
-	Projects       map[string]*ProjectConfig `yaml:"projects,omitempty"`
+	AtlassianEmail     string                    `yaml:"atlassian_email"`
+	AtlassianToken     string                    `yaml:"atlassian_token"`
+	BaseURL            string                    `yaml:"base_url"`
+	QAEmail            string                    `yaml:"qa_email,omitempty"`
+	ConfluenceSpaceKey string                    `yaml:"confluence_space_key,omitempty"`
+	DefaultProject     string                    `yaml:"default_project,omitempty"`
+	Projects           map[string]*ProjectConfig `yaml:"projects,omitempty"`
 }
 
 // Load loads config following priority: env vars > config file.
 func Load() (*Config, error) {
 	cfg := &Config{
-		AtlassianEmail: os.Getenv("ATLASSIAN_EMAIL"),
-		AtlassianToken: os.Getenv("ATLASSIAN_TOKEN"),
-		BaseURL:        os.Getenv("ATLASSIAN_BASE_URL"),
+		AtlassianEmail:     os.Getenv("ATLASSIAN_EMAIL"),
+		AtlassianToken:     os.Getenv("ATLASSIAN_TOKEN"),
+		BaseURL:            os.Getenv("ATLASSIAN_BASE_URL"),
+		ConfluenceSpaceKey: os.Getenv("CONFLUENCE_SPACE_KEY"),
 	}
 
-	if cfg.AtlassianEmail == "" || cfg.AtlassianToken == "" || cfg.BaseURL == "" {
-		fileCfg, err := loadFromFile()
-		if err == nil {
-			if cfg.AtlassianEmail == "" {
-				cfg.AtlassianEmail = fileCfg.AtlassianEmail
-			}
-			if cfg.AtlassianToken == "" {
-				cfg.AtlassianToken = fileCfg.AtlassianToken
-			}
-			if cfg.BaseURL == "" {
-				cfg.BaseURL = fileCfg.BaseURL
-			}
-			if cfg.DefaultProject == "" {
-				cfg.DefaultProject = fileCfg.DefaultProject
-			}
-			if cfg.QAEmail == "" {
-				cfg.QAEmail = fileCfg.QAEmail
-			}
-			if cfg.Projects == nil {
-				cfg.Projects = fileCfg.Projects
-			}
+	// Always merge from file so all fields are loaded regardless of env vars.
+	if fileCfg, err := loadFromFile(); err == nil {
+		if cfg.AtlassianEmail == "" {
+			cfg.AtlassianEmail = fileCfg.AtlassianEmail
+		}
+		if cfg.AtlassianToken == "" {
+			cfg.AtlassianToken = fileCfg.AtlassianToken
+		}
+		if cfg.BaseURL == "" {
+			cfg.BaseURL = fileCfg.BaseURL
+		}
+		if cfg.QAEmail == "" {
+			cfg.QAEmail = fileCfg.QAEmail
+		}
+		if cfg.ConfluenceSpaceKey == "" {
+			cfg.ConfluenceSpaceKey = fileCfg.ConfluenceSpaceKey
+		}
+		if cfg.DefaultProject == "" {
+			cfg.DefaultProject = fileCfg.DefaultProject
+		}
+		if cfg.Projects == nil {
+			cfg.Projects = fileCfg.Projects
 		}
 	}
 

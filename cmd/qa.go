@@ -59,10 +59,22 @@ func runQA(args []string) error {
 	if err != nil {
 		return fmt.Errorf("credenciales inválidas: %w. Ejecuta 'gtt init' para reconfigurar", err)
 	}
-	if os.Getenv("GTT_DEV") != "1" {
-		if cfg.QAEmail == "" || !strings.EqualFold(me.EmailAddress, cfg.QAEmail) {
-			return fmt.Errorf("acceso denegado: este comando es exclusivo para el usuario QA configurado en qa_email")
-		}
+	if cfg.QAEmail == "" || !strings.EqualFold(me.EmailAddress, cfg.QAEmail) {
+		return fmt.Errorf("acceso denegado: este comando es exclusivo para el usuario QA configurado en qa_email")
+	}
+
+	spaceKey := flags["--space"]
+	if spaceKey == "" {
+		spaceKey = cfg.ConfluenceSpaceKey
+	}
+	if spaceKey == "" {
+		return fmt.Errorf(
+			"Confluence space key no configurado.\n" +
+				"  Opción 1 (recomendada): agrega esta línea a ~/.config/deploy-doc/config.yaml:\n" +
+				"    confluence_space_key: PA\n" +
+				"  Opción 2: ejecuta 'gtt init' para reconfigurar todo\n" +
+				"  Opción 3: usa el flag en este comando: --space PA",
+		)
 	}
 
 	sprintName := fmt.Sprintf("%s_Sprint %d", module, sprint)
@@ -144,7 +156,7 @@ func runQA(args []string) error {
 	// [3/3] Publish to Confluence
 	stepLabel(3, 3, "Publicando en Confluence...")
 
-	existingPage, err := client.FindQAPage(module, sprint)
+	existingPage, err := client.FindQAPage(module, sprint, spaceKey)
 	if err != nil {
 		return err
 	}
@@ -174,7 +186,7 @@ func runQA(args []string) error {
 
 	// New page — ask user to confirm sibling reference for parentID/spaceID
 	stepLabel(3, 3, fmt.Sprintf("Seleccionando ubicación para %s en Confluence...", module))
-	candidates, err := client.FindQAPagesForModule(module)
+	candidates, err := client.FindQAPagesForModule(module, spaceKey)
 	if err != nil {
 		return err
 	}
