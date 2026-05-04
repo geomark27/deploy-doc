@@ -1,5 +1,5 @@
 # ================================================================
-#  deploy-doc - Makefile
+#  gtt - Makefile
 # ================================================================
 
 BINARY_NAME=gtt
@@ -33,7 +33,7 @@ help:
 	@echo "  Uso: make <comando>"
 	@echo ""
 	@echo "$(YELLOW)  🔨 Build & Run:$(NC)"
-	@echo "    build       Compila el binario en ./bin/deploy-doc"
+	@echo "    build       Compila el binario en ./bin/gtt"
 	@echo "    build-all   Compila para Linux, Windows y Mac"
 	@echo "    install     Compila e instala globalmente (~/.local/bin)"
 	@echo "    run         Ejecuta el CLI sin compilar (dev mode)"
@@ -231,11 +231,11 @@ release: lint
 	echo "$(YELLOW)[0/3]$(NC) Compilando binarios con version $$NEW_TAG..."; \
 	$(MAKE) build-all VER=$$NEW_TAG; \
 	echo "$(YELLOW)        Generando checksums.txt...$(NC)"; \
-	if command -v sha256sum >/dev/null 2>&1; then \
+	( if command -v sha256sum >/dev/null 2>&1; then \
 		cd $(BUILD_DIR) && sha256sum $(BINARY_NAME)-linux-amd64 $(BINARY_NAME)-windows-amd64.exe $(BINARY_NAME)-darwin-amd64 > checksums.txt; \
 	else \
 		cd $(BUILD_DIR) && shasum -a 256 $(BINARY_NAME)-linux-amd64 $(BINARY_NAME)-windows-amd64.exe $(BINARY_NAME)-darwin-amd64 > checksums.txt; \
-	fi; \
+	fi ); \
 	echo ""; \
 	echo "$(YELLOW)[1/3]$(NC) Commiteando y creando tag $$NEW_TAG..."; \
 	git add -A; \
@@ -248,16 +248,10 @@ release: lint
 	echo "$(GREEN)✓ Push completado$(NC)"; \
 	echo ""; \
 	echo "$(YELLOW)[3/3]$(NC) Publicando binarios en GitHub Releases..."; \
-	cp $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64       $(BUILD_DIR)/deploy-doc-linux-amd64; \
-	cp $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(BUILD_DIR)/deploy-doc-windows-amd64.exe; \
-	cp $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64      $(BUILD_DIR)/deploy-doc-darwin-amd64; \
 	gh release create $$NEW_TAG \
 		$(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
 		$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe \
 		$(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 \
-		$(BUILD_DIR)/deploy-doc-linux-amd64 \
-		$(BUILD_DIR)/deploy-doc-windows-amd64.exe \
-		$(BUILD_DIR)/deploy-doc-darwin-amd64 \
 		$(BUILD_DIR)/checksums.txt \
 		--title "$$NEW_TAG" \
 		--notes "Release $$NEW_TAG"; \
@@ -273,14 +267,11 @@ release-minor: lint
 	NEW_MINOR=$$((MINOR + 1)); \
 	NEW_TAG="v$$MAJOR.$$NEW_MINOR.0"; \
 	$(MAKE) build-all VER=$$NEW_TAG; \
-	cp $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64       $(BUILD_DIR)/deploy-doc-linux-amd64; \
-	cp $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(BUILD_DIR)/deploy-doc-windows-amd64.exe; \
-	cp $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64      $(BUILD_DIR)/deploy-doc-darwin-amd64; \
-	if command -v sha256sum >/dev/null 2>&1; then \
+	( if command -v sha256sum >/dev/null 2>&1; then \
 		cd $(BUILD_DIR) && sha256sum $(BINARY_NAME)-linux-amd64 $(BINARY_NAME)-windows-amd64.exe $(BINARY_NAME)-darwin-amd64 > checksums.txt; \
 	else \
 		cd $(BUILD_DIR) && shasum -a 256 $(BINARY_NAME)-linux-amd64 $(BINARY_NAME)-windows-amd64.exe $(BINARY_NAME)-darwin-amd64 > checksums.txt; \
-	fi; \
+	fi ); \
 	git add -A; \
 	git commit -m "release: $$NEW_TAG" 2>/dev/null || true; \
 	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
@@ -289,9 +280,6 @@ release-minor: lint
 		$(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
 		$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe \
 		$(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 \
-		$(BUILD_DIR)/deploy-doc-linux-amd64 \
-		$(BUILD_DIR)/deploy-doc-windows-amd64.exe \
-		$(BUILD_DIR)/deploy-doc-darwin-amd64 \
 		$(BUILD_DIR)/checksums.txt \
 		--title "$$NEW_TAG" \
 		--notes "Release $$NEW_TAG"; \
@@ -304,14 +292,11 @@ release-major: lint
 	NEW_MAJOR=$$((MAJOR + 1)); \
 	NEW_TAG="v$$NEW_MAJOR.0.0"; \
 	$(MAKE) build-all VER=$$NEW_TAG; \
-	cp $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64       $(BUILD_DIR)/deploy-doc-linux-amd64; \
-	cp $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(BUILD_DIR)/deploy-doc-windows-amd64.exe; \
-	cp $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64      $(BUILD_DIR)/deploy-doc-darwin-amd64; \
-	if command -v sha256sum >/dev/null 2>&1; then \
+	( if command -v sha256sum >/dev/null 2>&1; then \
 		cd $(BUILD_DIR) && sha256sum $(BINARY_NAME)-linux-amd64 $(BINARY_NAME)-windows-amd64.exe $(BINARY_NAME)-darwin-amd64 > checksums.txt; \
 	else \
 		cd $(BUILD_DIR) && shasum -a 256 $(BINARY_NAME)-linux-amd64 $(BINARY_NAME)-windows-amd64.exe $(BINARY_NAME)-darwin-amd64 > checksums.txt; \
-	fi; \
+	fi ); \
 	git add -A; \
 	git commit -m "release: $$NEW_TAG" 2>/dev/null || true; \
 	git tag -a $$NEW_TAG -m "Release $$NEW_TAG"; \
@@ -320,9 +305,6 @@ release-major: lint
 		$(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 \
 		$(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe \
 		$(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 \
-		$(BUILD_DIR)/deploy-doc-linux-amd64 \
-		$(BUILD_DIR)/deploy-doc-windows-amd64.exe \
-		$(BUILD_DIR)/deploy-doc-darwin-amd64 \
 		$(BUILD_DIR)/checksums.txt \
 		--title "$$NEW_TAG" \
 		--notes "Release $$NEW_TAG"; \

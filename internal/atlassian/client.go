@@ -101,7 +101,7 @@ func (c *Client) doJSON(method, path string, payload any) ([]byte, error) {
 func apiError(statusCode int, body []byte) error {
 	switch statusCode {
 	case 401:
-		return fmt.Errorf("credenciales inválidas (401). Verifica tu token ejecutando: deploy-doc init")
+		return fmt.Errorf("credenciales inválidas (401). Verifica tu token ejecutando: gtt init")
 	case 403:
 		return fmt.Errorf("sin permisos (403). Tu token no tiene acceso a este recurso")
 	case 404:

@@ -9,6 +9,7 @@ import (
 
 	"github.com/geomark27/deploy-doc/cmd"
 	"github.com/geomark27/deploy-doc/internal/build"
+	"github.com/geomark27/deploy-doc/internal/config"
 	"github.com/geomark27/deploy-doc/internal/installer"
 	"github.com/geomark27/deploy-doc/internal/updater"
 )
@@ -69,6 +70,9 @@ func main() {
 
 	// Clean up leftover .old binary on Windows from a previous update
 	updater.CleanOldBinary()
+
+	// One-time migration: move ~/.config/deploy-doc/config.yaml → ~/.config/gtt/
+	config.MigrateIfNeeded()
 
 	// Background update check (skip on update/help/version commands)
 	updateCh := make(chan string, 1)

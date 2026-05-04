@@ -181,7 +181,7 @@ func (c *Client) UpdatePage(pageID, title string, currentVersion int, adfBody ma
 		"title":  title,
 		"version": map[string]any{
 			"number":  currentVersion + 1,
-			"message": "Actualizado via deploy-doc",
+			"message": "Actualizado via gtt",
 		},
 		"body": map[string]any{
 			"representation": "atlas_doc_format",

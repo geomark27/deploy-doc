@@ -70,7 +70,7 @@ func runQA(args []string) error {
 	if spaceKey == "" {
 		return fmt.Errorf(
 			"Confluence space key no configurado.\n" +
-				"  Opción 1 (recomendada): agrega esta línea a ~/.config/deploy-doc/config.yaml:\n" +
+				"  Opción 1 (recomendada): agrega esta línea a ~/.config/gtt/config.yaml:\n" +
 				"    confluence_space_key: PA\n" +
 				"  Opción 2: ejecuta 'gtt init' para reconfigurar todo\n" +
 				"  Opción 3: usa el flag en este comando: --space PA",

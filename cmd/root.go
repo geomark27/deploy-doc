@@ -100,7 +100,7 @@ func printUsage() {
 	fmt.Print("    Nombres de repositorios\n")
 	fmt.Print("    VCS host  (ej: https://bitbucket.org)\n")
 	fmt.Print("    VCS org   (ej: devtyt)\n\n")
-	fmt.Print("  Todo se guarda en " + clCyan + "~/.config/deploy-doc/config.yaml" + clReset + "\n")
+	fmt.Print("  Todo se guarda en " + clCyan + "~/.config/gtt/config.yaml" + clReset + "\n")
 	fmt.Print("  Las variables de entorno tienen prioridad sobre el archivo:\n")
 	fmt.Print("    ATLASSIAN_EMAIL, ATLASSIAN_TOKEN, ATLASSIAN_BASE_URL, CONFLUENCE_SPACE_KEY\n\n")
 

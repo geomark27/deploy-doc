@@ -28,7 +28,7 @@ func runInit(args []string) error {
 	}
 
 	fmt.Println(clCyan + clBold + "── Configuración de gtt ──" + clReset)
-	fmt.Println("Tus credenciales se guardarán en ~/.config/deploy-doc/config.yaml")
+	fmt.Println("Tus credenciales se guardarán en ~/.config/gtt/config.yaml")
 	fmt.Println()
 
 	email, err := prompt(reader, "Atlassian email")

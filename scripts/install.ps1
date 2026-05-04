@@ -7,7 +7,7 @@ $ErrorActionPreference = "Stop"
 
 $repo    = "geomark27/deploy-doc"
 $asset   = "gtt-windows-amd64.exe"
-$installDir = "$env:LOCALAPPDATA\Programs\deploy-doc"
+$installDir = "$env:LOCALAPPDATA\Programs\gtt"
 $dest    = "$installDir\gtt.exe"
 
 Write-Host ""
@@ -32,19 +32,12 @@ $url = "https://github.com/$repo/releases/download/$version/$asset"
 Invoke-WebRequest -Uri $url -OutFile $dest
 Write-Host "      descargado en $dest" -ForegroundColor Green
 
-# 4. Limpiar archivos legacy de deploy-doc (si existen)
+# 4. Limpiar carpeta legacy de deploy-doc (si existe)
 Write-Host "[3/4] Limpiando archivos anteriores..." -ForegroundColor Yellow
-$removed = $false
-if (Test-Path "$installDir\deploy-doc.exe") {
-    Remove-Item "$installDir\deploy-doc.exe" -Force
-    $removed = $true
-}
-if (Test-Path "$installDir\deploy-doc.exe.old") {
-    Remove-Item "$installDir\deploy-doc.exe.old" -Force
-    $removed = $true
-}
-if ($removed) {
-    Write-Host "      deploy-doc eliminado" -ForegroundColor Green
+$legacyDir = "$env:LOCALAPPDATA\Programs\deploy-doc"
+if (Test-Path $legacyDir) {
+    Remove-Item $legacyDir -Recurse -Force
+    Write-Host "      carpeta deploy-doc eliminada" -ForegroundColor Green
 } else {
     Write-Host "      nada que limpiar" -ForegroundColor Green
 }

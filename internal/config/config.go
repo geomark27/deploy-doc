@@ -20,7 +20,7 @@ type ProjectConfig struct {
 }
 
 // Config holds all configuration needed by the CLI.
-// Priority: env vars > ~/.config/deploy-doc/config.yaml
+// Priority: env vars > ~/.config/gtt/config.yaml
 type Config struct {
 	AtlassianEmail     string                    `yaml:"atlassian_email"`
 	AtlassianToken     string                    `yaml:"atlassian_token"`
@@ -97,7 +97,48 @@ func ConfigPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".config", "deploy-doc", "config.yaml"), nil
+	return filepath.Join(home, ".config", "gtt", "config.yaml"), nil
+}
+
+// MigrateIfNeeded copies the legacy ~/.config/deploy-doc/config.yaml to
+// ~/.config/gtt/config.yaml the first time a user runs v1.2.0+.
+// The old directory is removed only after a successful copy.
+func MigrateIfNeeded() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	newPath := filepath.Join(home, ".config", "gtt", "config.yaml")
+	oldPath := filepath.Join(home, ".config", "deploy-doc", "config.yaml")
+	oldDir := filepath.Join(home, ".config", "deploy-doc")
+
+	// Already migrated or fresh install — nothing to do.
+	if _, err := os.Stat(newPath); err == nil {
+		return
+	}
+
+	// No legacy config — fresh install, nothing to migrate.
+	if _, err := os.Stat(oldPath); err != nil {
+		return
+	}
+
+	if err := os.MkdirAll(filepath.Join(home, ".config", "gtt"), 0700); err != nil {
+		return
+	}
+
+	data, err := os.ReadFile(oldPath)
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(newPath, data, 0600); err != nil {
+		return
+	}
+
+	// Remove old directory only after successful copy.
+	os.RemoveAll(oldDir)
+
+	fmt.Println("✓ Configuración migrada a ~/.config/gtt/config.yaml")
 }
 
 // loadFromFile reads and unmarshals the config file.

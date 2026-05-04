@@ -65,7 +65,7 @@ func InstallDir() string {
 		if localAppData == "" {
 			localAppData = filepath.Join(home, "AppData", "Local")
 		}
-		return filepath.Join(localAppData, "Programs", "deploy-doc")
+		return filepath.Join(localAppData, "Programs", "gtt")
 	}
 	return filepath.Join(home, ".local", "bin")
 }

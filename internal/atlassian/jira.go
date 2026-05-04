@@ -57,7 +57,7 @@ func (c *Client) VerifyCredentialsMatch(configuredEmail string, warn func(string
 		if warn != nil {
 			warn(fmt.Sprintf(
 				"el email del config (%s) no coincide con la cuenta autenticada (%s). "+
-					"Búsquedas pueden devolver resultados vacíos. Revisa ~/.config/deploy-doc/config.yaml o ejecuta: gtt init",
+					"Búsquedas pueden devolver resultados vacíos. Revisa ~/.config/gtt/config.yaml o ejecuta: gtt init",
 				configuredEmail, u.EmailAddress,
 			))
 		}
