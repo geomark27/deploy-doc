@@ -150,14 +150,25 @@ func tryZenity(defaultName string) string {
 }
 
 // tryPowerShellWSL opens a Windows SaveFileDialog from WSL2 via powershell.exe.
+// The returned Windows path is converted to its WSL equivalent (/mnt/c/...).
 func tryPowerShellWSL(defaultName string) string {
 	if _, err := exec.LookPath("powershell.exe"); err != nil {
 		return ""
 	}
-	return runPowerShellSaveDialog(defaultName, "powershell.exe")
+	winPath := runPowerShellSaveDialog(defaultName, "powershell.exe")
+	if winPath == "" {
+		return ""
+	}
+	if len(winPath) >= 2 && winPath[1] == ':' {
+		drive := strings.ToLower(string(winPath[0]))
+		rest := strings.ReplaceAll(winPath[2:], "\\", "/")
+		return "/mnt/" + drive + rest
+	}
+	return winPath
 }
 
 // tryPowerShellDirect opens a Windows SaveFileDialog (native Windows).
+// The returned Windows path is used as-is.
 func tryPowerShellDirect(defaultName string) string {
 	if _, err := exec.LookPath("powershell"); err != nil {
 		return ""
@@ -180,17 +191,7 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileName }
 	if err != nil {
 		return ""
 	}
-	winPath := strings.TrimSpace(string(out))
-	if winPath == "" {
-		return ""
-	}
-	// Convert Windows path (C:\...) to WSL path (/mnt/c/...) if needed.
-	if len(winPath) >= 2 && winPath[1] == ':' {
-		drive := strings.ToLower(string(winPath[0]))
-		rest := strings.ReplaceAll(winPath[2:], "\\", "/")
-		return "/mnt/" + drive + rest
-	}
-	return winPath
+	return strings.TrimSpace(string(out))
 }
 
 // tryOsascript opens a macOS save dialog.
