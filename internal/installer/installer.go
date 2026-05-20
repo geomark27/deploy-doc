@@ -18,9 +18,9 @@ func IsInstalled() bool {
 	}
 	exe, _ = filepath.EvalSymlinks(exe)
 
-	// Skip install when running via "go run" (temp build path)
-	if strings.Contains(filepath.ToSlash(exe), "/go-build/") ||
-		strings.Contains(filepath.ToSlash(exe), "\\go-build\\") {
+	// Skip install when running via "go run" (temp build path like /tmp/go-build123/...)
+	if strings.Contains(filepath.ToSlash(exe), "/go-build") ||
+		strings.Contains(filepath.ToSlash(exe), "\\go-build") {
 		return true
 	}
 

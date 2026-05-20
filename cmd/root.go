@@ -43,6 +43,8 @@ var commands = map[string]func([]string) error{
 	"update":   runUpdate,
 	"project":  runProject,
 	"qa":       runQA,
+	"fetch":    runFetch,
+	"f":        runFetch,
 }
 
 // Execute is the entry point for the CLI.
@@ -84,6 +86,7 @@ func printUsage() {
 	fmt.Print("  init              Configura credenciales y preferencias (wizard interactivo)\n")
 	fmt.Print("  g, gen, generate  Genera un documento de despliegue en Confluence\n")
 	fmt.Print("  qa                Genera consolidado de pruebas QA en Confluence\n")
+	fmt.Print("  f, fetch          Exporta una página de Confluence a .txt por issue key\n")
 	fmt.Print("  project           Gestiona proyectos: list, add, default, remove\n")
 	fmt.Print("  update            Actualiza gtt a la última versión\n")
 	fmt.Print("  version           Muestra la versión instalada\n\n")
@@ -130,6 +133,12 @@ func printUsage() {
 	fmt.Print("    1. Flag --space en el comando\n")
 	fmt.Print("    2. confluence_space_key global en config.yaml\n\n")
 
+	// ── fetch ────────────────────────────────────────────────────────────────
+	fmt.Print(clBold + "Flags de fetch (gtt f):\n" + clReset)
+	fmt.Print("  -i, --issue    Clave del issue en Jira              " + clYellow + "(requerido)" + clReset + "\n")
+	fmt.Print("  -o, --output   Nombre del archivo de salida         (por defecto: APP-1981_Titulo.txt)\n")
+	fmt.Print("  -s, --space    " + clCyan + "Override" + clReset + " del Confluence space key para esta búsqueda\n\n")
+
 	// ── Ejemplos ─────────────────────────────────────────────────────────────
 	fmt.Print(clBold + "Ejemplos:\n" + clReset)
 	fmt.Print("\n  " + clBold + "# Uso estándar (space key viene del config.yaml):" + clReset + "\n")
@@ -143,6 +152,10 @@ func printUsage() {
 	fmt.Print("\n  " + clBold + "# Gestión de proyectos:" + clReset + "\n")
 	fmt.Print("  gtt project list\n")
 	fmt.Print("  gtt g -i APP-1999 -b abc1234 -p echo\n")
+	fmt.Print("\n  " + clBold + "# Exportar página de Confluence a .txt:" + clReset + "\n")
+	fmt.Print("  gtt fetch -i APP-1981\n")
+	fmt.Print("  gtt f -i APP-1981 -o mi_tarea.txt\n")
+	fmt.Print("  gtt f -i APP-1981 --space PA\n")
 	fmt.Print("\n  " + clBold + "# Otros:" + clReset + "\n")
 	fmt.Print("  gtt init\n")
 	fmt.Print("  gtt update\n\n")
