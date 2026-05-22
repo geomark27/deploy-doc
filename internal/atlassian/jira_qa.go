@@ -224,12 +224,12 @@ func KanbanWindow() (since time.Time, period string) {
 	return
 }
 
-// GetQATasksForReviewKanban returns Kanban dev tasks for the given module that
+// GetQATasksForReviewKanban returns all Kanban dev tasks (any component) that
 // transitioned to Testing status on or after sinceDate (format YYYY-MM-DD).
-func (c *Client) GetQATasksForReviewKanban(module, sinceDate string) ([]QAIssue, error) {
+func (c *Client) GetQATasksForReviewKanban(sinceDate string) ([]QAIssue, error) {
 	jql := fmt.Sprintf(
-		`project = APP AND status in (10001, 10002, 10003, 10004) AND component = "%s" AND status CHANGED TO "Testing" AFTER "%s" ORDER BY key ASC`,
-		module, sinceDate,
+		`project = APP AND status in (10001, 10002, 10003, 10004) AND status CHANGED TO "Testing" AFTER "%s" ORDER BY key ASC`,
+		sinceDate,
 	)
 	all, err := c.searchQAIssues(jql)
 	if err != nil {

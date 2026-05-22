@@ -48,9 +48,9 @@ func BuildQATitle(module string, sprint int) string {
 	return fmt.Sprintf("Consolidado de Pruebas QA - %s - Sprint %d", module, sprint)
 }
 
-// BuildQAKanbanTitle returns "Consolidado de Pruebas QA - DAI - 08/05 al 22/05/2026".
-func BuildQAKanbanTitle(module, period string) string {
-	return fmt.Sprintf("Consolidado de Pruebas QA - %s - %s", module, period)
+// BuildQAKanbanTitle returns "Consolidado de Pruebas QA - 08/05 al 22/05/2026".
+func BuildQAKanbanTitle(period string) string {
+	return fmt.Sprintf("Consolidado de Pruebas QA - %s", period)
 }
 
 func qaInfoTable(periodHeader, periodValue string) map[string]any {

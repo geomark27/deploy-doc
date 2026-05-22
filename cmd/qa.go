@@ -27,13 +27,7 @@ func runQA(args []string) error {
 
 	reader := bufio.NewReader(os.Stdin)
 
-	if module == "" {
-		var err error
-		module, err = prompt(reader, "Módulo (ej: DAI, Aforo)")
-		if err != nil {
-			return err
-		}
-	}
+	// Determinar modo primero para saber si el módulo es necesario.
 	if sprintStr == "" {
 		var err error
 		sprintStr, err = prompt(reader, "Número de sprint (Enter para modo Kanban)")
@@ -49,6 +43,13 @@ func runQA(args []string) error {
 		sprint, err = strconv.Atoi(strings.TrimSpace(sprintStr))
 		if err != nil {
 			return fmt.Errorf("--sprint debe ser un número: %s", sprintStr)
+		}
+		// Módulo solo es requerido en modo Sprint.
+		if module == "" {
+			module, err = prompt(reader, "Módulo (ej: DAI, Aforo)")
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -82,8 +83,6 @@ func runQA(args []string) error {
 		)
 	}
 
-	fmt.Printf(clBold+"Módulo : "+clReset+clCyan+"%s"+clReset+"\n", module)
-
 	var reviewTasks, qaTasks []atlassian.QAIssue
 	var period string
 	if kanban {
@@ -93,7 +92,7 @@ func runQA(args []string) error {
 		fmt.Printf(clBold+"Período: "+clReset+clCyan+"%s"+clReset+"\n\n", period)
 		// [1/3] Fetch tasks
 		stepLabel(1, 3, fmt.Sprintf("Buscando tareas del período %s...", clr(clBold, period)))
-		reviewTasks, err = client.GetQATasksForReviewKanban(module, sinceStr)
+		reviewTasks, err = client.GetQATasksForReviewKanban(sinceStr)
 		if err != nil {
 			return err
 		}
@@ -103,6 +102,7 @@ func runQA(args []string) error {
 		}
 	} else {
 		sprintName := fmt.Sprintf("%s_Sprint %d", module, sprint)
+		fmt.Printf(clBold+"Módulo : "+clReset+clCyan+"%s"+clReset+"\n", module)
 		fmt.Printf(clBold+"Sprint : "+clReset+clCyan+"%d"+clReset+"\n\n", sprint)
 		// [1/3] Fetch tasks
 		stepLabel(1, 3, fmt.Sprintf("Buscando tareas del sprint %s...", clr(clBold, sprintName)))
@@ -117,7 +117,7 @@ func runQA(args []string) error {
 	}
 
 	if len(reviewTasks) == 0 {
-		warnLine("no hay tareas en Testing o En Revisión para este sprint/módulo")
+		warnLine("no hay tareas en Testing o En Revisión para este período")
 	} else {
 		okLine(fmt.Sprintf("%s tareas para revisión", clr(clBold, fmt.Sprintf("%d", len(reviewTasks)))))
 	}
@@ -164,10 +164,9 @@ func runQA(args []string) error {
 	var title string
 	var adf map[string]any
 	if kanban {
-		title = document.BuildQAKanbanTitle(module, period)
+		title = document.BuildQAKanbanTitle(period)
 		adf = document.BuildQA(document.QADoc{
 			Period:  period,
-			Module:  module,
 			Tasks:   reviewTasks,
 			QATasks: qaTasks,
 		})
@@ -193,7 +192,7 @@ func runQA(args []string) error {
 
 	var existingPage *atlassian.Page
 	if kanban {
-		existingPage, err = client.FindQAKanbanPage(module, period, spaceKey)
+		existingPage, err = client.FindQAKanbanPage(period, spaceKey)
 	} else {
 		existingPage, err = client.FindQAPage(module, sprint, spaceKey)
 	}
@@ -225,12 +224,15 @@ func runQA(args []string) error {
 	}
 
 	// New page — ask user to confirm sibling reference for parentID/spaceID
-	stepLabel(3, 3, fmt.Sprintf("Seleccionando ubicación para %s en Confluence...", module))
+	stepLabel(3, 3, "Seleccionando ubicación en Confluence...")
 	candidates, err := client.FindQAPagesForModule(module, spaceKey)
 	if err != nil {
 		return err
 	}
 	if len(candidates) == 0 {
+		if kanban {
+			return fmt.Errorf("no se encontró ninguna página QA de referencia. Crea una página 'Consolidado de Pruebas QA' manualmente en Confluence primero")
+		}
 		return fmt.Errorf("no se encontró ninguna página QA para el módulo '%s'. Crea 'Consolidado de Pruebas QA - %s - Sprint N' manualmente en Confluence primero", module, module)
 	}
 

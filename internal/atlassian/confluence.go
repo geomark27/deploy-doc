@@ -241,12 +241,16 @@ func (c *Client) FindQAPage(module string, sprint int, spaceKey string) (*Page, 
 }
 
 // FindQAPagesForModule returns recent QA consolidated pages for the given module.
-// Used to let the user pick the sibling reference when creating a new sprint page.
+// If module is empty, returns any recent QA consolidated pages (used for Kanban mode).
 // spaceKey restricts the search to a specific space; empty string searches all spaces.
 func (c *Client) FindQAPagesForModule(module, spaceKey string) ([]Page, error) {
-	cqlBase := fmt.Sprintf(`title ~ "Consolidado de Pruebas QA - %s" ORDER BY created DESC`, module)
+	titleFilter := `"Consolidado de Pruebas QA"`
+	if module != "" {
+		titleFilter = fmt.Sprintf(`"Consolidado de Pruebas QA - %s"`, module)
+	}
+	cqlBase := fmt.Sprintf(`title ~ %s ORDER BY created DESC`, titleFilter)
 	if spaceKey != "" {
-		cqlBase = fmt.Sprintf(`title ~ "Consolidado de Pruebas QA - %s" AND space = "%s" ORDER BY created DESC`, module, spaceKey)
+		cqlBase = fmt.Sprintf(`title ~ %s AND space = "%s" ORDER BY created DESC`, titleFilter, spaceKey)
 	}
 	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=5", url.QueryEscape(cqlBase))
 
@@ -271,9 +275,9 @@ func (c *Client) FindQAPagesForModule(module, spaceKey string) ([]Page, error) {
 	return pages, nil
 }
 
-// FindQAKanbanPage searches for an existing QA Kanban consolidated page by module and period label.
-func (c *Client) FindQAKanbanPage(module, period, spaceKey string) (*Page, error) {
-	title := fmt.Sprintf("Consolidado de Pruebas QA - %s - %s", module, period)
+// FindQAKanbanPage searches for an existing QA Kanban consolidated page by period label.
+func (c *Client) FindQAKanbanPage(period, spaceKey string) (*Page, error) {
+	title := fmt.Sprintf("Consolidado de Pruebas QA - %s", period)
 	path := fmt.Sprintf("/wiki/api/v2/pages?title=%s&limit=1", url.QueryEscape(title))
 	if spaceKey != "" {
 		path += "&space-key=" + url.QueryEscape(spaceKey)
