@@ -134,8 +134,12 @@ func tryZenity(defaultName string) string {
 	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
 		return ""
 	}
+	zenityPath, err := exec.LookPath("zenity")
+	if err != nil {
+		return ""
+	}
 	cwd, _ := os.Getwd()
-	out, err := exec.Command("zenity",
+	out, err := exec.Command(zenityPath,
 		"--file-selection",
 		"--save",
 		"--confirm-overwrite",
@@ -196,11 +200,15 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileName }
 
 // tryOsascript opens a macOS save dialog.
 func tryOsascript(defaultName string) string {
+	osascriptPath, err := exec.LookPath("osascript")
+	if err != nil {
+		return ""
+	}
 	script := fmt.Sprintf(
 		`POSIX path of (choose file name with prompt "Guardar documento:" default name "%s")`,
 		defaultName,
 	)
-	out, err := exec.Command("osascript", "-e", script).Output()
+	out, err := exec.Command(osascriptPath, "-e", script).Output()
 	if err != nil {
 		return ""
 	}

@@ -8,8 +8,10 @@ import (
 )
 
 // QADoc holds all data needed to build the QA consolidated report ADF document.
+// Sprint > 0 means sprint mode; Sprint == 0 with Period set means Kanban mode.
 type QADoc struct {
 	Sprint  int
+	Period  string // used in Kanban mode, e.g. "08/05 al 22/05/2026"
 	Module  string
 	Tasks   []atlassian.QAIssue // Tabla Consolidada (Testing / En Revisión)
 	QATasks []atlassian.QAIssue // Resumen — tasks assigned to the QA user
@@ -17,12 +19,20 @@ type QADoc struct {
 
 // BuildQA constructs the ADF document for the QA consolidated report.
 func BuildQA(doc QADoc) map[string]any {
+	var periodHeader, periodValue string
+	if doc.Sprint > 0 {
+		periodHeader = "Sprint"
+		periodValue = fmt.Sprintf("%d", doc.Sprint)
+	} else {
+		periodHeader = "Período"
+		periodValue = doc.Period
+	}
 	return map[string]any{
 		"type":    "doc",
 		"version": 1,
 		"content": []any{
 			heading(2, "Información General"),
-			qaInfoTable(doc.Sprint),
+			qaInfoTable(periodHeader, periodValue),
 			heading(2, "Tabla Consolidada"),
 			qaConsolidatedTable(doc.Tasks),
 			heading(2, "Resumen"),
@@ -38,7 +48,12 @@ func BuildQATitle(module string, sprint int) string {
 	return fmt.Sprintf("Consolidado de Pruebas QA - %s - Sprint %d", module, sprint)
 }
 
-func qaInfoTable(sprint int) map[string]any {
+// BuildQAKanbanTitle returns "Consolidado de Pruebas QA - DAI - 08/05 al 22/05/2026".
+func BuildQAKanbanTitle(module, period string) string {
+	return fmt.Sprintf("Consolidado de Pruebas QA - %s - %s", module, period)
+}
+
+func qaInfoTable(periodHeader, periodValue string) map[string]any {
 	today := time.Now().Format("02 Jan 2006")
 	return table("full-width", 760, []any{
 		tableRow([]any{
@@ -58,8 +73,8 @@ func qaInfoTable(sprint int) map[string]any {
 			tableCell(560, textNode("Eliana Lissette Veliz Galarza")),
 		}),
 		tableRow([]any{
-			tableHeader(200, textNode("Sprint")),
-			tableCell(560, textNode(fmt.Sprintf("%d", sprint))),
+			tableHeader(200, textNode(periodHeader)),
+			tableCell(560, textNode(periodValue)),
 		}),
 	})
 }

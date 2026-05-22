@@ -271,6 +271,38 @@ func (c *Client) FindQAPagesForModule(module, spaceKey string) ([]Page, error) {
 	return pages, nil
 }
 
+// FindQAKanbanPage searches for an existing QA Kanban consolidated page by module and period label.
+func (c *Client) FindQAKanbanPage(module, period, spaceKey string) (*Page, error) {
+	title := fmt.Sprintf("Consolidado de Pruebas QA - %s - %s", module, period)
+	path := fmt.Sprintf("/wiki/api/v2/pages?title=%s&limit=1", url.QueryEscape(title))
+	if spaceKey != "" {
+		path += "&space-key=" + url.QueryEscape(spaceKey)
+	}
+
+	body, err := c.Get(path)
+	if err != nil {
+		return nil, fmt.Errorf("error buscando página QA Kanban: %w", err)
+	}
+
+	var result struct {
+		Results []pageResponse `json:"results"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("error parseando respuesta: %w", err)
+	}
+
+	if len(result.Results) == 0 {
+		return nil, nil
+	}
+
+	r := result.Results[0]
+	return &Page{
+		ID:     r.ID,
+		Title:  r.Title,
+		WebURL: c.BaseURL + "/wiki" + r.Links.WebUI,
+	}, nil
+}
+
 // marshalADF serializes the ADF document to a JSON string.
 func marshalADF(v any) (string, error) {
 	b, err := json.Marshal(v)

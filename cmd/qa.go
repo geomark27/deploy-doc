@@ -36,15 +36,20 @@ func runQA(args []string) error {
 	}
 	if sprintStr == "" {
 		var err error
-		sprintStr, err = prompt(reader, "Número de sprint")
+		sprintStr, err = prompt(reader, "Número de sprint (Enter para modo Kanban)")
 		if err != nil {
 			return err
 		}
 	}
 
-	sprint, err := strconv.Atoi(strings.TrimSpace(sprintStr))
-	if err != nil {
-		return fmt.Errorf("--sprint debe ser un número: %s", sprintStr)
+	kanban := strings.TrimSpace(sprintStr) == ""
+	var sprint int
+	if !kanban {
+		var err error
+		sprint, err = strconv.Atoi(strings.TrimSpace(sprintStr))
+		if err != nil {
+			return fmt.Errorf("--sprint debe ser un número: %s", sprintStr)
+		}
 	}
 
 	cfg, err := config.Load()
@@ -77,20 +82,38 @@ func runQA(args []string) error {
 		)
 	}
 
-	sprintName := fmt.Sprintf("%s_Sprint %d", module, sprint)
 	fmt.Printf(clBold+"Módulo : "+clReset+clCyan+"%s"+clReset+"\n", module)
-	fmt.Printf(clBold+"Sprint : "+clReset+clCyan+"%d"+clReset+"\n\n", sprint)
 
-	// [1/3] Fetch tasks
-	stepLabel(1, 3, fmt.Sprintf("Buscando tareas del sprint %s...", clr(clBold, sprintName)))
-
-	reviewTasks, err := client.GetQATasksForReview(sprintName, module)
-	if err != nil {
-		return err
-	}
-	qaTasks, err := client.GetQATasksAsAssignee(sprintName, cfg.QAEmail)
-	if err != nil {
-		return err
+	var reviewTasks, qaTasks []atlassian.QAIssue
+	var period string
+	if kanban {
+		since, per := atlassian.KanbanWindow()
+		period = per
+		sinceStr := since.Format("2006-01-02")
+		fmt.Printf(clBold+"Período: "+clReset+clCyan+"%s"+clReset+"\n\n", period)
+		// [1/3] Fetch tasks
+		stepLabel(1, 3, fmt.Sprintf("Buscando tareas del período %s...", clr(clBold, period)))
+		reviewTasks, err = client.GetQATasksForReviewKanban(module, sinceStr)
+		if err != nil {
+			return err
+		}
+		qaTasks, err = client.GetQATasksAsAssigneeKanban(sinceStr, cfg.QAEmail)
+		if err != nil {
+			return err
+		}
+	} else {
+		sprintName := fmt.Sprintf("%s_Sprint %d", module, sprint)
+		fmt.Printf(clBold+"Sprint : "+clReset+clCyan+"%d"+clReset+"\n\n", sprint)
+		// [1/3] Fetch tasks
+		stepLabel(1, 3, fmt.Sprintf("Buscando tareas del sprint %s...", clr(clBold, sprintName)))
+		reviewTasks, err = client.GetQATasksForReview(sprintName, module)
+		if err != nil {
+			return err
+		}
+		qaTasks, err = client.GetQATasksAsAssignee(sprintName, cfg.QAEmail)
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(reviewTasks) == 0 {
@@ -138,13 +161,25 @@ func runQA(args []string) error {
 	}
 	fmt.Println()
 
-	title := document.BuildQATitle(module, sprint)
-	adf := document.BuildQA(document.QADoc{
-		Sprint:  sprint,
-		Module:  module,
-		Tasks:   reviewTasks,
-		QATasks: qaTasks,
-	})
+	var title string
+	var adf map[string]any
+	if kanban {
+		title = document.BuildQAKanbanTitle(module, period)
+		adf = document.BuildQA(document.QADoc{
+			Period:  period,
+			Module:  module,
+			Tasks:   reviewTasks,
+			QATasks: qaTasks,
+		})
+	} else {
+		title = document.BuildQATitle(module, sprint)
+		adf = document.BuildQA(document.QADoc{
+			Sprint:  sprint,
+			Module:  module,
+			Tasks:   reviewTasks,
+			QATasks: qaTasks,
+		})
+	}
 
 	if dryRun {
 		fmt.Printf("Título: %s\n\n", title)
@@ -156,7 +191,12 @@ func runQA(args []string) error {
 	// [3/3] Publish to Confluence
 	stepLabel(3, 3, "Publicando en Confluence...")
 
-	existingPage, err := client.FindQAPage(module, sprint, spaceKey)
+	var existingPage *atlassian.Page
+	if kanban {
+		existingPage, err = client.FindQAKanbanPage(module, period, spaceKey)
+	} else {
+		existingPage, err = client.FindQAPage(module, sprint, spaceKey)
+	}
 	if err != nil {
 		return err
 	}

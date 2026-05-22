@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // QAIssue holds the evaluation data for one task in the QA consolidated report.
@@ -41,8 +42,10 @@ func (c *Client) GetQATasksForReview(sprintName, module string) ([]QAIssue, erro
 	}
 	dev := make([]QAIssue, 0, len(all))
 	for _, t := range all {
-		if !strings.HasPrefix(strings.ToLower(t.Summary), "revisión de tarea") &&
-			!strings.HasPrefix(strings.ToLower(t.Summary), "revision de tarea") {
+		lower := strings.ToLower(t.Summary)
+		if !strings.HasPrefix(lower, "revisión de tarea") &&
+			!strings.HasPrefix(lower, "revision de tarea") &&
+			!strings.HasPrefix(lower, "qa") {
 			dev = append(dev, t)
 		}
 	}
@@ -199,6 +202,65 @@ func adfExtractText(node map[string]any) string {
 		}
 	}
 	return sb.String()
+}
+
+// businessDaysAgo returns the date N business days before from, skipping weekends.
+func businessDaysAgo(n int, from time.Time) time.Time {
+	d := from
+	for count := 0; count < n; {
+		d = d.AddDate(0, 0, -1)
+		if d.Weekday() != time.Saturday && d.Weekday() != time.Sunday {
+			count++
+		}
+	}
+	return d
+}
+
+// KanbanWindow returns the start date (10 business days ago) and a display label like "08/05 al 22/05/2026".
+func KanbanWindow() (since time.Time, period string) {
+	now := time.Now()
+	since = businessDaysAgo(10, now)
+	period = fmt.Sprintf("%s al %s", since.Format("02/01"), now.Format("02/01/2006"))
+	return
+}
+
+// GetQATasksForReviewKanban returns Kanban dev tasks for the given module that
+// transitioned to Testing status on or after sinceDate (format YYYY-MM-DD).
+func (c *Client) GetQATasksForReviewKanban(module, sinceDate string) ([]QAIssue, error) {
+	jql := fmt.Sprintf(
+		`project = APP AND status in (10001, 10002, 10003, 10004) AND component = "%s" AND status CHANGED TO "Testing" AFTER "%s" ORDER BY key ASC`,
+		module, sinceDate,
+	)
+	all, err := c.searchQAIssues(jql)
+	if err != nil {
+		return nil, err
+	}
+	dev := make([]QAIssue, 0, len(all))
+	for _, t := range all {
+		lower := strings.ToLower(t.Summary)
+		if !strings.HasPrefix(lower, "revisión de tarea") &&
+			!strings.HasPrefix(lower, "revision de tarea") &&
+			!strings.HasPrefix(lower, "qa") {
+			dev = append(dev, t)
+		}
+	}
+	return dev, nil
+}
+
+// GetQATasksAsAssigneeKanban returns tasks assigned to the QA user updated on or after sinceDate.
+func (c *Client) GetQATasksAsAssigneeKanban(sinceDate, qaEmail string) ([]QAIssue, error) {
+	assignee := "currentUser()"
+	if qaEmail != "" {
+		accountID, err := c.resolveAccountID(qaEmail)
+		if err == nil && accountID != "" {
+			assignee = fmt.Sprintf("%q", accountID)
+		}
+	}
+	jql := fmt.Sprintf(
+		`project = APP AND assignee = %s AND updated >= "%s" ORDER BY key ASC`,
+		assignee, sinceDate,
+	)
+	return c.searchQAIssues(jql)
 }
 
 // HasDeployDocLink returns true if the issue has a remote link titled "Documento de Despliegue...".
