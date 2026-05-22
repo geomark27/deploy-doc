@@ -30,7 +30,7 @@ func runQA(args []string) error {
 	// Determinar modo primero para saber si el módulo es necesario.
 	if sprintStr == "" {
 		var err error
-		sprintStr, err = prompt(reader, "Número de sprint (Enter para modo Kanban)")
+		sprintStr, err = promptOptional(reader, "Número de sprint (Enter para modo Kanban)")
 		if err != nil {
 			return err
 		}
