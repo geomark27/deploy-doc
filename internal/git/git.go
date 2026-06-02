@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -28,7 +29,7 @@ func GetChangedFiles(commitHash, workDir string) ([]string, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
-			return nil, fmt.Errorf("error al leer el commit %s: %s", commitHash, strings.TrimSpace(string(ee.Stderr)))
+			return nil, fmt.Errorf("%s", explainGitError(string(ee.Stderr), commitHash, workDir))
 		}
 		return nil, fmt.Errorf("error al leer el commit %s: %w", commitHash, err)
 	}
@@ -67,6 +68,50 @@ func GetChangedFilesMulti(hashes []string, workDir string) ([]string, error) {
 		}
 	}
 	return all, nil
+}
+
+// explainGitError traduce el stderr de git en un mensaje accionable para el usuario.
+// Cubre los 3 errores más frecuentes al leer commits: hash inexistente localmente,
+// directorio que no es un repo Git, y hash ambiguo.
+func explainGitError(stderr, commitHash, workDir string) string {
+	s := strings.ToLower(stderr)
+	loc := workDir
+	if loc == "" {
+		if wd, err := os.Getwd(); err == nil {
+			loc = wd
+		} else {
+			loc = "."
+		}
+	}
+
+	switch {
+	case strings.Contains(s, "bad object"),
+		strings.Contains(s, "unknown revision"),
+		strings.Contains(s, "bad revision"):
+		return fmt.Sprintf(
+			"el commit %s no existe en el repo local (%s).\n"+
+				"        Posibles causas:\n"+
+				"          1. Tu repo local está desactualizado. Ejecuta:\n"+
+				"               cd %q && git fetch --all\n"+
+				"          2. El hash pertenece al otro repo (¿backend en lugar de frontend, o viceversa?)\n"+
+				"          3. El hash es incorrecto. Verifícalo en Bitbucket",
+			commitHash, loc, loc)
+
+	case strings.Contains(s, "not a git repository"):
+		return fmt.Sprintf(
+			"el directorio %s no es un repositorio Git.\n"+
+				"        Soluciones:\n"+
+				"          • Ejecuta gtt dentro del clon local del repo correspondiente, o\n"+
+				"          • Configura las rutas backend_path / frontend_path con: gtt init",
+			loc)
+
+	case strings.Contains(s, "ambiguous argument"):
+		return fmt.Sprintf(
+			"el hash %s es ambiguo o demasiado corto. Usa al menos 7-8 caracteres.",
+			commitHash)
+	}
+
+	return fmt.Sprintf("error al leer el commit %s: %s", commitHash, strings.TrimSpace(stderr))
 }
 
 // GroupByDirectory agrupa los archivos por su directorio padre,
