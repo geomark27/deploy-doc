@@ -180,7 +180,7 @@ func runGenerate(args []string) error {
 
 	// If ALL commits failed, abort
 	if len(commitErrors) > 0 && backendFiles == nil && frontendFiles == nil {
-		return fmt.Errorf("no se pudo leer ningún commit. Verifica que estás en el repositorio correcto y que los hashes son válidos")
+		return fmt.Errorf("no se pudo leer ningún commit. Revisa las sugerencias de arriba — en la mayoría de los casos basta con hacer 'git fetch --all' dentro del repo correspondiente")
 	}
 	// If only some failed, warn but continue with what we have
 	if len(commitErrors) > 0 {
