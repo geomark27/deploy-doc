@@ -118,11 +118,27 @@ func runGenerate(args []string) error {
 	okLine(fmt.Sprintf("%s — %s", clr(clBold, jiraIssue.Key), jiraIssue.Summary))
 	fmt.Println()
 
+	// Build the title early: it's deterministic from the issue and is exactly
+	// the value Confluence checks for uniqueness, so we reuse it to detect an
+	// existing doc reliably below.
+	title := document.BuildTitle(jiraIssue.Key, jiraIssue.Summary)
+
 	// --- [2/4] Check for existing deploy doc ---
 	stepLabel(2, 4, "Verificando documentos existentes...")
-	existingDoc, err := client.FindDeployDocByIssue(issue, spaceKey)
+	// Primary check: exact-title lookup via v2 (direct DB, no index lag). This
+	// is the same condition that triggers a 400 on create, so it catches a
+	// just-created doc that CQL search hasn't indexed yet.
+	existingDoc, err := client.FindPageByTitle(title, spaceKey)
 	if err != nil {
 		return err
+	}
+	// Fallback: fuzzy CQL search by issue key, in case a doc for this issue
+	// exists under a different title (e.g. the summary changed since it was
+	// created). Best-effort only — subject to search-index lag.
+	if existingDoc == nil {
+		if doc, ferr := client.FindDeployDocByIssue(issue, spaceKey); ferr == nil && doc != nil {
+			existingDoc = doc
+		}
 	}
 
 	var updateExisting bool
@@ -188,8 +204,7 @@ func runGenerate(args []string) error {
 	}
 	fmt.Println()
 
-	// --- Build title and ADF ---
-	title := document.BuildTitle(jiraIssue.Key, jiraIssue.Summary)
+	// --- Build ADF ---
 	adf := document.Build(document.DeployDoc{
 		IssueKey:       jiraIssue.Key,
 		IssueSummary:   jiraIssue.Summary,
@@ -243,7 +258,7 @@ func runGenerate(args []string) error {
 
 	// --- [4/4] Find location and create ---
 	stepLabel(4, 4, "Seleccionando ubicación en Confluence...")
-	pages, err := client.FindLastDeployDoc()
+	pages, err := client.FindLastDeployDoc(spaceKey)
 	if err != nil {
 		return err
 	}

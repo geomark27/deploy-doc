@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strings"
 )
 
 // Page represents a Confluence page (minimal fields we need).
@@ -50,29 +51,73 @@ type pageResponse struct {
 // asking the user where to place a new document.
 const deployDocSearchLimit = 10
 
-// FindLastDeployDoc finds the last deploy document created by the authenticated user
-// searching by title pattern "Documento de Despliegue".
-func (c *Client) FindLastDeployDoc() ([]Page, error) {
-	cql := url.QueryEscape(`title ~ "Documento de Despliegue" AND creator = currentUser() ORDER BY created DESC`)
-	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=%d", cql, deployDocSearchLimit)
+// deployDocTitlePrefix is the common prefix of every deploy document title.
+const deployDocTitlePrefix = "Documento de Despliegue"
+
+// ResolveSpaceID returns the numeric space ID for a given space key via the v2 API.
+func (c *Client) ResolveSpaceID(spaceKey string) (string, error) {
+	path := fmt.Sprintf("/wiki/api/v2/spaces?keys=%s&limit=1", url.QueryEscape(spaceKey))
+	body, err := c.Get(path)
+	if err != nil {
+		return "", fmt.Errorf("error resolviendo space %q: %w", spaceKey, err)
+	}
+
+	var result struct {
+		Results []struct {
+			ID string `json:"id"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return "", fmt.Errorf("error parseando space: %w", err)
+	}
+	if len(result.Results) == 0 {
+		return "", fmt.Errorf("no se encontró el space %q en Confluence", spaceKey)
+	}
+	return result.Results[0].ID, nil
+}
+
+// FindLastDeployDoc finds the most recently created deploy documents in the given
+// space using the v2 pages API (direct DB lookup, sorted by creation date). This
+// avoids the search-index lag of CQL, which made freshly created docs invisible.
+// Results are filtered client-side by the deploy-doc title prefix.
+func (c *Client) FindLastDeployDoc(spaceKey string) ([]Page, error) {
+	spaceID, err := c.ResolveSpaceID(spaceKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Over-fetch since the v2 API can't filter by title prefix server-side;
+	// we keep only deploy docs and cap to deployDocSearchLimit afterwards.
+	path := fmt.Sprintf("/wiki/api/v2/pages?space-id=%s&sort=-created-date&limit=100", url.QueryEscape(spaceID))
 
 	body, err := c.Get(path)
 	if err != nil {
 		return nil, fmt.Errorf("error buscando documentos: %w", err)
 	}
 
-	var result searchResponse
+	var result struct {
+		Results []pageResponse `json:"results"`
+	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("error parseando respuesta: %w", err)
 	}
 
-	var pages []Page
+	pages := make([]Page, 0, deployDocSearchLimit)
 	for _, r := range result.Results {
+		if !strings.HasPrefix(r.Title, deployDocTitlePrefix) {
+			continue
+		}
 		pages = append(pages, Page{
-			ID:     r.Content.ID,
-			Title:  r.Content.Title,
-			WebURL: c.BaseURL + "/wiki" + r.Content.Links.WebUI,
+			ID:       r.ID,
+			Title:    r.Title,
+			ParentID: r.ParentID,
+			SpaceID:  r.SpaceID,
+			Version:  r.Version.Number,
+			WebURL:   c.BaseURL + "/wiki" + r.Links.WebUI,
 		})
+		if len(pages) >= deployDocSearchLimit {
+			break
+		}
 	}
 
 	return pages, nil
@@ -130,6 +175,45 @@ func (c *Client) FindDeployDocByIssue(issueKey, spaceKey string) (*Page, error) 
 		ID:     r.Content.ID,
 		Title:  r.Content.Title,
 		WebURL: c.BaseURL + "/wiki" + r.Content.Links.WebUI,
+	}, nil
+}
+
+// FindPageByTitle looks up a page by its EXACT title via the v2 pages API.
+// Unlike CQL search, this is a direct DB lookup with no indexing delay, so it
+// reliably detects a page that was just created. This is the same uniqueness
+// condition Confluence enforces on creation, so it catches the "title already
+// exists" 400 before we attempt to create. spaceKey restricts the search to a
+// specific space; empty string searches all spaces.
+func (c *Client) FindPageByTitle(title, spaceKey string) (*Page, error) {
+	path := fmt.Sprintf("/wiki/api/v2/pages?title=%s&limit=1", url.QueryEscape(title))
+	if spaceKey != "" {
+		path += "&space-key=" + url.QueryEscape(spaceKey)
+	}
+
+	body, err := c.Get(path)
+	if err != nil {
+		return nil, fmt.Errorf("error buscando documento existente: %w", err)
+	}
+
+	var result struct {
+		Results []pageResponse `json:"results"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("error parseando respuesta: %w", err)
+	}
+
+	if len(result.Results) == 0 {
+		return nil, nil
+	}
+
+	r := result.Results[0]
+	return &Page{
+		ID:       r.ID,
+		Title:    r.Title,
+		ParentID: r.ParentID,
+		SpaceID:  r.SpaceID,
+		Version:  r.Version.Number,
+		WebURL:   c.BaseURL + "/wiki" + r.Links.WebUI,
 	}, nil
 }
 
