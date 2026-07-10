@@ -258,12 +258,25 @@ func runGenerate(args []string) error {
 
 	// --- [4/4] Find location and create ---
 	stepLabel(4, 4, "Seleccionando ubicación en Confluence...")
-	pages, err := client.FindLastDeployDoc(spaceKey)
+
+	// Resolve the current user so the location list shows only their own docs.
+	// A failure here is non-fatal: fall back to the team-wide list.
+	var accountID string
+	if me, whoErr := client.Whoami(); whoErr == nil {
+		accountID = me.AccountID
+	} else {
+		warnLine("no se pudo verificar tu usuario; se mostrarán documentos de todo el equipo.")
+	}
+
+	pages, fellBack, err := client.FindLastDeployDoc(spaceKey, accountID)
 	if err != nil {
 		return err
 	}
 	if len(pages) == 0 {
 		return fmt.Errorf("no se encontraron documentos de despliegue previos. Crea uno manualmente primero como referencia")
+	}
+	if fellBack {
+		warnLine("no tienes documentos de despliegue propios en este space; se muestran los de todo el equipo como referencia de ubicación.")
 	}
 
 	fmt.Println()
