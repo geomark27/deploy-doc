@@ -39,6 +39,7 @@ type pageResponse struct {
 	Title    string `json:"title"`
 	ParentID string `json:"parentId"`
 	SpaceID  string `json:"spaceId"`
+	AuthorID string `json:"authorId"`
 	Version  struct {
 		Number int `json:"number"`
 	} `json:"version"`
@@ -80,10 +81,15 @@ func (c *Client) ResolveSpaceID(spaceKey string) (string, error) {
 // space using the v2 pages API (direct DB lookup, sorted by creation date). This
 // avoids the search-index lag of CQL, which made freshly created docs invisible.
 // Results are filtered client-side by the deploy-doc title prefix.
-func (c *Client) FindLastDeployDoc(spaceKey string) ([]Page, error) {
+//
+// When accountID is non-empty, only documents created by that user are returned
+// (used to show "my docs" instead of the whole team's). If the user has no deploy
+// docs of their own, it falls back to the team-wide list and reports that via the
+// returned fellBack flag so the caller can warn the user.
+func (c *Client) FindLastDeployDoc(spaceKey, accountID string) (pages []Page, fellBack bool, err error) {
 	spaceID, err := c.ResolveSpaceID(spaceKey)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// Over-fetch since the v2 API can't filter by title prefix server-side;
@@ -92,35 +98,48 @@ func (c *Client) FindLastDeployDoc(spaceKey string) ([]Page, error) {
 
 	body, err := c.Get(path)
 	if err != nil {
-		return nil, fmt.Errorf("error buscando documentos: %w", err)
+		return nil, false, fmt.Errorf("error buscando documentos: %w", err)
 	}
 
 	var result struct {
 		Results []pageResponse `json:"results"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("error parseando respuesta: %w", err)
+		return nil, false, fmt.Errorf("error parseando respuesta: %w", err)
 	}
 
-	pages := make([]Page, 0, deployDocSearchLimit)
+	// Collect all deploy docs, tracking which ones belong to the current user.
+	all := make([]Page, 0, deployDocSearchLimit)
+	mine := make([]Page, 0, deployDocSearchLimit)
 	for _, r := range result.Results {
 		if !strings.HasPrefix(r.Title, deployDocTitlePrefix) {
 			continue
 		}
-		pages = append(pages, Page{
+		p := Page{
 			ID:       r.ID,
 			Title:    r.Title,
 			ParentID: r.ParentID,
 			SpaceID:  r.SpaceID,
 			Version:  r.Version.Number,
 			WebURL:   c.BaseURL + "/wiki" + r.Links.WebUI,
-		})
-		if len(pages) >= deployDocSearchLimit {
-			break
+		}
+		if len(all) < deployDocSearchLimit {
+			all = append(all, p)
+		}
+		if accountID != "" && r.AuthorID == accountID && len(mine) < deployDocSearchLimit {
+			mine = append(mine, p)
 		}
 	}
 
-	return pages, nil
+	// Prefer the user's own docs; fall back to the team-wide list only when the
+	// user has none (e.g. a first-time user who hasn't created any yet).
+	if accountID != "" && len(mine) > 0 {
+		return mine, false, nil
+	}
+	if accountID != "" && len(mine) == 0 {
+		return all, true, nil
+	}
+	return all, false, nil
 }
 
 // GetPage returns a page by ID including its parentId.
