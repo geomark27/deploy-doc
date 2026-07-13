@@ -6,6 +6,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/geomark27/deploy-doc/cmd"
 	"github.com/geomark27/deploy-doc/internal/build"
@@ -74,30 +75,57 @@ func main() {
 	// One-time migration: move ~/.config/deploy-doc/config.yaml → ~/.config/gtt/
 	config.MigrateIfNeeded()
 
-	// Background update check (skip on update/help/version commands)
-	updateCh := make(chan string, 1)
-	if shouldCheckUpdate() {
-		go func() {
-			latest, err := updater.CheckLatest(build.Version)
-			if err == nil && latest != "" {
-				updateCh <- latest
-			}
-		}()
+	// Update notification. The banner is served from a local cache (instant,
+	// no network) and the GitHub API is only queried in the background once
+	// per checkInterval. Skipped when stdout is not a terminal (pipes, files,
+	// CI) so it never pollutes captured output; GTT_NO_UPDATE_CHECK forces off.
+	doCheck := shouldCheckUpdate() && os.Getenv("GTT_NO_UPDATE_CHECK") == "" && isTerminal()
+	notice := ""
+	fresh := make(chan string, 1)
+	if doCheck {
+		notice = updater.CachedNotice(build.Version)
+		if updater.NeedsRefresh() {
+			go func() { fresh <- updater.Refresh(build.Version) }()
+		} else {
+			close(fresh)
+		}
 	}
 
 	err := cmd.Execute()
 
-	// Print update notification after command finishes
-	select {
-	case latest := <-updateCh:
-		fmt.Printf("\nNueva versión disponible: %s  →  ejecuta: gtt update\n", latest)
-	default:
+	if doCheck {
+		if notice != "" {
+			// Cache already knew about a newer version — show it instantly.
+			fmt.Println(notice)
+		} else {
+			// Nothing cached yet: briefly wait for the background check so the
+			// very first run can still notify, without blocking on slow nets.
+			select {
+			case n := <-fresh:
+				if n != "" {
+					fmt.Println(n)
+				}
+			case <-time.After(1500 * time.Millisecond):
+			}
+		}
 	}
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "\nError: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// isTerminal reports whether stdout is an interactive terminal. When gtt's
+// output is redirected to a file, a pipe, or a CI log, stdout is not a
+// character device and the update banner is suppressed so it can't leak into
+// captured output.
+func isTerminal() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func shouldCheckUpdate() bool {
