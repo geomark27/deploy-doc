@@ -149,8 +149,8 @@ func filesTable(repoName, commitHash string, files map[string][]string, vcsHost,
 // considerTable builds the "A considerar" task list table.
 func considerTable() map[string]any {
 	tasks := []any{
-		taskItem("Ejecutar php artisan migrate"),
 		taskItem("Pasar backend al servidor"),
+		taskItem("Ejecutar php artisan migrate"),
 		taskItem("Pasar frontend"),
 	}
 

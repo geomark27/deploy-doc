@@ -392,8 +392,8 @@ Cada documento creado en Confluence incluye:
   | Observación | Links directos al diff en Bitbucket |
 
 - **Sección "A considerar"**: lista de tareas predefinidas para el proceso de despliegue:
-  - Ejecutar php artisan migrate
   - Pasar backend al servidor
+  - Ejecutar php artisan migrate
   - Pasar frontend
 
 ---
