@@ -62,7 +62,46 @@ También puedes configurarlo con variables de entorno:
 export ATLASSIAN_EMAIL=tu@email.com
 export ATLASSIAN_TOKEN=tu_token
 export ATLASSIAN_BASE_URL=https://tuempresa.atlassian.net
+export CONFLUENCE_SPACE_KEY=PA
 ```
+
+### Claves que se editan directamente en el YAML
+
+Estas no las pide `gtt init` porque solo aplican al comando `qa`:
+
+```yaml
+qa_email: "qa@tuempresa.com"   # habilita 'gtt qa' para ese usuario
+qa_report:                     # encabezado del consolidado de pruebas
+  lider_tecnico: "..."
+  pmo: "..."
+  qa: "..."
+
+# Pasos de la sección "A considerar" de un documento nuevo.
+deploy_checklist:
+  - "Pasar backend al servidor"
+  - "Ejecutar php artisan migrate"
+  - "Pasar frontend"
+```
+
+Las claves de `qa_report` que falten se publican como `—`. Son datos de la
+organización y por diseño no viven en el código — ver
+[`docs/security/patrones-seguros.md`](docs/security/patrones-seguros.md) (P-008).
+
+`deploy_checklist` se puede definir también **por proyecto** (gana sobre la
+global), útil cuando los stacks difieren:
+
+```yaml
+projects:
+  echo:
+    backend_path: /home/tu/repos/echo-api
+    deploy_checklist:
+      - "Pasar API"
+      - "npm run build && pasar dist"
+```
+
+Sin configurar, se usa un default genérico (`Pasar backend al servidor`,
+`Ejecutar migraciones`, `Pasar frontend`). Solo aplica al **crear**: al
+actualizar, la sección se preserva tal como quedó en Confluence.
 
 ---
 
@@ -164,7 +203,7 @@ Solo actualiza si la versión remota es mayor a la instalada — nunca hace down
 
 ### Requisitos
 
-- Go 1.21+
+- Go — la versión que declara `go.mod` (hoy `1.26.1`) o superior
 - Make
 
 ### Comandos disponibles
@@ -173,7 +212,8 @@ Solo actualiza si la versión remota es mayor a la instalada — nunca hace down
 make help            # Ver todos los comandos disponibles
 make build           # Compilar para el OS actual
 make run ARGS='...'  # Ejecutar sin compilar (dev mode)
-make lint            # Formatear y analizar el código
+make lint            # Formatear y analizar el código (fmt + vet)
+make test            # Ejecutar los tests unitarios
 make tidy            # Actualizar dependencias
 make clean           # Limpiar binarios
 make release         # Bump patch + compilar + push a GitHub
@@ -181,37 +221,50 @@ make release-minor   # Bump minor + push a GitHub
 make release-major   # Bump major + push a GitHub
 ```
 
+> `make lint` no corre los tests. Antes de un release: `make lint && make test`.
+
 ### Estructura del proyecto
 
 ```
 deploy-doc/
 ├── cmd/
-│   ├── root.go       # Router + constantes de color ANSI
+│   ├── root.go       # Router + constantes de color ANSI + help
 │   ├── init.go       # gtt init
 │   ├── generate.go   # gtt g / gen / generate
+│   ├── qa.go         # gtt qa
+│   ├── fetch.go      # gtt f / fetch
 │   ├── project.go    # gtt project
 │   └── update.go     # gtt update
 ├── internal/
 │   ├── build/
-│   │   └── version.go    # Variable Version (ldflags)
+│   │   └── version.go          # Variable Version (ldflags)
 │   ├── config/
-│   │   └── config.go     # Config + ProjectConfig con YAML
+│   │   └── config.go           # Config + ProjectConfig + QAReportConfig
 │   ├── git/
-│   │   └── git.go        # GetChangedFilesMulti, GroupByDirectory
+│   │   └── git.go              # GetChangedFilesMulti, GroupByDirectory
 │   ├── atlassian/
-│   │   ├── client.go     # Cliente HTTP con Basic Auth
-│   │   ├── jira.go       # Jira REST API
-│   │   └── confluence.go # Confluence REST API
+│   │   ├── client.go           # Cliente HTTP con Basic Auth
+│   │   ├── query.go            # quoteLiteral — escapado de JQL/CQL
+│   │   ├── jira.go             # Jira REST API
+│   │   ├── jira_qa.go          # JQL del consolidado QA
+│   │   ├── confluence.go       # Confluence REST API (v1 + v2)
+│   │   ├── confluence_fetch.go # Búsqueda y descarga de páginas
+│   │   └── storage_text.go     # Storage format → texto plano
 │   ├── document/
-│   │   └── builder.go    # Construcción del ADF
+│   │   ├── builder.go          # ADF del documento de despliegue
+│   │   ├── qa_builder.go       # ADF del consolidado QA
+│   │   └── preserve.go         # Preservación de secciones editadas a mano
 │   ├── installer/
-│   │   └── installer.go  # Self-install al primer run
+│   │   └── installer.go        # Self-install al primer run
 │   └── updater/
-│       └── updater.go    # CheckLatest + SelfUpdate + migración
+│       ├── updater.go          # CheckLatest + SelfUpdate (SHA-256)
+│       └── notify.go           # Caché del aviso de versión
 ├── docs/
 │   ├── arquitectura.md
 │   ├── guia-de-usuario.md
-│   └── bitacora/
+│   ├── bitacora/               # Una entrada por versión
+│   └── security/
+│       └── patrones-seguros.md # Patrones P-001..P-008
 ├── main.go
 ├── Makefile
 └── README.md

@@ -65,8 +65,21 @@ func runQA(args []string) error {
 	if err != nil {
 		return fmt.Errorf("credenciales inválidas: %w. Ejecuta 'gtt init' para reconfigurar", err)
 	}
+	// Guardrail, not access control. qa_email lives in the user's own config
+	// file and can be edited freely, so this cannot enforce anything — its job
+	// is to stop someone from publishing the consolidated report by accident.
+	// Real authorization is Atlassian permissions on the space and the project.
 	if cfg.QAEmail == "" || !strings.EqualFold(me.EmailAddress, cfg.QAEmail) {
-		return fmt.Errorf("acceso denegado: este comando es exclusivo para el usuario QA configurado en qa_email")
+		configured := cfg.QAEmail
+		if configured == "" {
+			configured = "(sin configurar)"
+		}
+		return fmt.Errorf(
+			"este comando está pensado para la cuenta de QA y no coincide con la tuya.\n"+
+				"  Cuenta autenticada  : %s\n"+
+				"  qa_email del config : %s\n"+
+				"  Si te corresponde generar el consolidado, ajusta qa_email en ~/.config/gtt/config.yaml",
+			me.EmailAddress, configured)
 	}
 
 	spaceKey := flags["--space"]
@@ -142,41 +155,75 @@ func runQA(args []string) error {
 		return clr(clRed, "✗")
 	}
 
+	// A lookup that fails is reported as unknown, never as a failed check: this
+	// table gets published as QA evidence and a network or permission error is
+	// not proof that a task is missing its deploy document.
 	for i := range reviewTasks {
-		hasDoc, _ := client.HasDeployDocLink(reviewTasks[i].Key)
-		reviewTasks[i].HasDeployDoc = hasDoc
-
-		if reviewTasks[i].HasCodingErrors {
-			obs, _ := client.GetNovedadComment(reviewTasks[i].Key)
-			reviewTasks[i].Observations = obs
+		hasDoc, err := client.HasDeployDocLink(reviewTasks[i].Key)
+		if err != nil {
+			reviewTasks[i].DeployDocUnknown = true
+			warnLine(fmt.Sprintf("%s: no se pudo verificar el documento de despliegue (%v)", reviewTasks[i].Key, err))
+		} else {
+			reviewTasks[i].HasDeployDoc = hasDoc
 		}
 
+		if reviewTasks[i].HasCodingErrors {
+			obs, err := client.GetNovedadComment(reviewTasks[i].Key)
+			if err != nil {
+				reviewTasks[i].Observations = "(no se pudieron leer las observaciones)"
+				warnLine(fmt.Sprintf("%s: %v", reviewTasks[i].Key, err))
+			} else {
+				reviewTasks[i].Observations = obs
+			}
+		}
+
+		docMark := check(reviewTasks[i].HasDeployDoc)
+		if reviewTasks[i].DeployDocUnknown {
+			docMark = clr(clYellow, "?")
+		}
 		okLine(fmt.Sprintf("%-10s  %s %s %s %s",
 			reviewTasks[i].Key,
 			check(!reviewTasks[i].HasCodingErrors),
 			check(!reviewTasks[i].HasDevReturns),
-			check(reviewTasks[i].HasDeployDoc),
+			docMark,
 			check(reviewTasks[i].PRMerged),
 		))
 	}
 	fmt.Println()
+
+	// Report header names come from config (qa_report); missing keys render as
+	// "—" so the document never carries names embedded in the binary.
+	var liderTecnico, pmo, qaName string
+	if cfg.QAReport != nil {
+		liderTecnico = cfg.QAReport.LiderTecnico
+		pmo = cfg.QAReport.PMO
+		qaName = cfg.QAReport.QA
+	} else {
+		warnLine("no hay 'qa_report' en ~/.config/gtt/config.yaml; Líder Técnico, PMO y QA saldrán vacíos.")
+	}
 
 	var title string
 	var adf map[string]any
 	if kanban {
 		title = document.BuildQAKanbanTitle(period)
 		adf = document.BuildQA(document.QADoc{
-			Period:  period,
-			Tasks:   reviewTasks,
-			QATasks: qaTasks,
+			Period:       period,
+			Tasks:        reviewTasks,
+			QATasks:      qaTasks,
+			LiderTecnico: liderTecnico,
+			PMO:          pmo,
+			QA:           qaName,
 		})
 	} else {
 		title = document.BuildQATitle(module, sprint)
 		adf = document.BuildQA(document.QADoc{
-			Sprint:  sprint,
-			Module:  module,
-			Tasks:   reviewTasks,
-			QATasks: qaTasks,
+			Sprint:       sprint,
+			Module:       module,
+			Tasks:        reviewTasks,
+			QATasks:      qaTasks,
+			LiderTecnico: liderTecnico,
+			PMO:          pmo,
+			QA:           qaName,
 		})
 	}
 
@@ -224,7 +271,8 @@ func runQA(args []string) error {
 	}
 
 	// New page — ask user to confirm sibling reference for parentID/spaceID
-	stepLabel(3, 3, "Seleccionando ubicación en Confluence...")
+	fmt.Println()
+	fmt.Println(clBold + "Seleccionando ubicación en Confluence..." + clReset)
 	candidates, err := client.FindQAPagesForModule(module, spaceKey)
 	if err != nil {
 		return err

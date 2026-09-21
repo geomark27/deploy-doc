@@ -42,6 +42,7 @@ help:
 	@echo "$(YELLOW)  🧪 Calidad de código:$(NC)"
 	@echo "    fmt         Formatea el código fuente (go fmt)"
 	@echo "    vet         Analiza el código en busca de errores (go vet)"
+	@echo "    test        Ejecuta los tests unitarios (go test)"
 	@echo "    lint        Ejecuta fmt + vet juntos"
 	@echo "    tidy        Limpia y actualiza dependencias (go mod tidy)"
 	@echo ""
@@ -125,6 +126,12 @@ vet:
 	@echo "$(YELLOW)Analizando código...$(NC)"
 	@go vet ./...
 	@echo "$(GREEN)✓ Sin errores$(NC)"
+
+.PHONY: test
+test:
+	@echo "$(YELLOW)Ejecutando tests...$(NC)"
+	@go test ./...
+	@echo "$(GREEN)✓ Tests OK$(NC)"
 
 .PHONY: lint
 lint: fmt vet

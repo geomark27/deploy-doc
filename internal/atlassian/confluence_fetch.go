@@ -98,9 +98,9 @@ func (c *Client) GetPageWithContent(pageID string) (*PageContent, error) {
 // FindPagesByText searches Confluence for pages whose content mentions the query.
 // spaceKey restricts the search to a specific space; empty string searches all spaces.
 func (c *Client) FindPagesByText(query, spaceKey string) ([]Page, error) {
-	cql := fmt.Sprintf(`text ~ "%s"`, query)
+	cql := fmt.Sprintf(`text ~ %s`, quoteLiteral(query))
 	if spaceKey != "" {
-		cql += fmt.Sprintf(` AND space = "%s"`, spaceKey)
+		cql += fmt.Sprintf(` AND space = %s`, quoteLiteral(spaceKey))
 	}
 	cql += " ORDER BY lastModified DESC"
 

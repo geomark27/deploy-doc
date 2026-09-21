@@ -142,6 +142,67 @@ func (c *Client) FindLastDeployDoc(spaceKey, accountID string) (pages []Page, fe
 	return all, false, nil
 }
 
+// PageADF is a page together with its body parsed as an ADF document.
+// ADF is nil when the body is stored in another representation (a page written
+// in the legacy editor uses "storage"), which lets the caller warn instead of
+// silently discarding content it could not read.
+type PageADF struct {
+	Page
+	ADF map[string]any
+}
+
+// pageADFResponse is a page response that also carries the ADF body. Confluence
+// returns the document as a JSON string inside body.atlas_doc_format.value, so
+// it needs a second unmarshal.
+type pageADFResponse struct {
+	pageResponse
+	Body struct {
+		ADF struct {
+			Value string `json:"value"`
+		} `json:"atlas_doc_format"`
+	} `json:"body"`
+}
+
+// GetPageADF returns a page by ID including its body parsed as ADF.
+//
+// Needed to preserve hand-edited sections across an update: the v2 update
+// endpoint replaces the whole body, so anything not carried over from the
+// previous version is lost.
+func (c *Client) GetPageADF(pageID string) (*PageADF, error) {
+	path := fmt.Sprintf("/wiki/api/v2/pages/%s?body-format=atlas_doc_format", pageID)
+
+	body, err := c.Get(path)
+	if err != nil {
+		return nil, fmt.Errorf("error obteniendo página %s: %w", pageID, err)
+	}
+
+	var resp pageADFResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("error parseando página: %w", err)
+	}
+
+	out := &PageADF{
+		Page: Page{
+			ID:       resp.ID,
+			Title:    resp.Title,
+			ParentID: resp.ParentID,
+			SpaceID:  resp.SpaceID,
+			Version:  resp.Version.Number,
+			WebURL:   c.BaseURL + "/wiki" + resp.Links.WebUI,
+		},
+	}
+
+	if raw := strings.TrimSpace(resp.Body.ADF.Value); raw != "" {
+		var doc map[string]any
+		if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+			return nil, fmt.Errorf("error parseando el ADF de la página %s: %w", pageID, err)
+		}
+		out.ADF = doc
+	}
+
+	return out, nil
+}
+
 // GetPage returns a page by ID including its parentId.
 func (c *Client) GetPage(pageID string) (*Page, error) {
 	path := fmt.Sprintf("/wiki/api/v2/pages/%s", pageID)
@@ -169,9 +230,10 @@ func (c *Client) GetPage(pageID string) (*Page, error) {
 // FindDeployDocByIssue searches for an existing deploy doc matching the given issue key.
 // spaceKey restricts the search to a specific Confluence space; empty string searches all spaces.
 func (c *Client) FindDeployDocByIssue(issueKey, spaceKey string) (*Page, error) {
-	cqlBase := fmt.Sprintf(`title ~ "Documento de Despliegue" AND title ~ "%s"`, issueKey)
+	cqlBase := fmt.Sprintf(`title ~ %s AND title ~ %s`,
+		quoteLiteral(deployDocTitlePrefix), quoteLiteral(issueKey))
 	if spaceKey != "" {
-		cqlBase += fmt.Sprintf(` AND space = "%s"`, spaceKey)
+		cqlBase += fmt.Sprintf(` AND space = %s`, quoteLiteral(spaceKey))
 	}
 	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=1", url.QueryEscape(cqlBase))
 
@@ -197,16 +259,25 @@ func (c *Client) FindDeployDocByIssue(issueKey, spaceKey string) (*Page, error) 
 	}, nil
 }
 
-// FindPageByTitle looks up a page by its EXACT title via the v2 pages API.
+// findPageByExactTitle looks up a page by its EXACT title via the v2 pages API.
 // Unlike CQL search, this is a direct DB lookup with no indexing delay, so it
 // reliably detects a page that was just created. This is the same uniqueness
 // condition Confluence enforces on creation, so it catches the "title already
-// exists" 400 before we attempt to create. spaceKey restricts the search to a
-// specific space; empty string searches all spaces.
-func (c *Client) FindPageByTitle(title, spaceKey string) (*Page, error) {
+// exists" 400 before we attempt to create.
+//
+// spaceKey restricts the lookup to one space; empty string searches all spaces.
+// The v2 endpoint filters by numeric space-id only — there is no space-key
+// parameter and an unknown query param is ignored silently — so the key is
+// resolved to an id first. Getting this wrong makes the filter a no-op and lets
+// a same-titled page in another space be found, and then overwritten.
+func (c *Client) findPageByExactTitle(title, spaceKey string) (*Page, error) {
 	path := fmt.Sprintf("/wiki/api/v2/pages?title=%s&limit=1", url.QueryEscape(title))
 	if spaceKey != "" {
-		path += "&space-key=" + url.QueryEscape(spaceKey)
+		spaceID, err := c.ResolveSpaceID(spaceKey)
+		if err != nil {
+			return nil, err
+		}
+		path += "&space-id=" + url.QueryEscape(spaceID)
 	}
 
 	body, err := c.Get(path)
@@ -234,6 +305,11 @@ func (c *Client) FindPageByTitle(title, spaceKey string) (*Page, error) {
 		Version:  r.Version.Number,
 		WebURL:   c.BaseURL + "/wiki" + r.Links.WebUI,
 	}, nil
+}
+
+// FindPageByTitle looks up a deploy document by its exact title.
+func (c *Client) FindPageByTitle(title, spaceKey string) (*Page, error) {
+	return c.findPageByExactTitle(title, spaceKey)
 }
 
 // CreatePage creates a new Confluence page under the given parent.
@@ -313,47 +389,25 @@ func (c *Client) UpdatePage(pageID, title string, currentVersion int, adfBody ma
 // Uses the v2 pages API (direct DB lookup) instead of CQL search to avoid indexing delays.
 // spaceKey restricts the search to a specific space; empty string searches all spaces.
 func (c *Client) FindQAPage(module string, sprint int, spaceKey string) (*Page, error) {
-	title := fmt.Sprintf("Consolidado de Pruebas QA - %s - Sprint %d", module, sprint)
-	path := fmt.Sprintf("/wiki/api/v2/pages?title=%s&limit=1", url.QueryEscape(title))
-	if spaceKey != "" {
-		path += "&space-key=" + url.QueryEscape(spaceKey)
-	}
-
-	body, err := c.Get(path)
-	if err != nil {
-		return nil, fmt.Errorf("error buscando página QA: %w", err)
-	}
-
-	var result struct {
-		Results []pageResponse `json:"results"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("error parseando respuesta: %w", err)
-	}
-
-	if len(result.Results) == 0 {
-		return nil, nil
-	}
-
-	r := result.Results[0]
-	return &Page{
-		ID:     r.ID,
-		Title:  r.Title,
-		WebURL: c.BaseURL + "/wiki" + r.Links.WebUI,
-	}, nil
+	return c.findPageByExactTitle(
+		fmt.Sprintf("Consolidado de Pruebas QA - %s - Sprint %d", module, sprint),
+		spaceKey,
+	)
 }
 
 // FindQAPagesForModule returns recent QA consolidated pages for the given module.
 // If module is empty, returns any recent QA consolidated pages (used for Kanban mode).
 // spaceKey restricts the search to a specific space; empty string searches all spaces.
 func (c *Client) FindQAPagesForModule(module, spaceKey string) ([]Page, error) {
-	titleFilter := `"Consolidado de Pruebas QA"`
+	title := "Consolidado de Pruebas QA"
 	if module != "" {
-		titleFilter = fmt.Sprintf(`"Consolidado de Pruebas QA - %s"`, module)
+		title += " - " + module
 	}
+	titleFilter := quoteLiteral(title)
 	cqlBase := fmt.Sprintf(`title ~ %s ORDER BY created DESC`, titleFilter)
 	if spaceKey != "" {
-		cqlBase = fmt.Sprintf(`title ~ %s AND space = "%s" ORDER BY created DESC`, titleFilter, spaceKey)
+		cqlBase = fmt.Sprintf(`title ~ %s AND space = %s ORDER BY created DESC`,
+			titleFilter, quoteLiteral(spaceKey))
 	}
 	path := fmt.Sprintf("/wiki/rest/api/search?cql=%s&limit=5", url.QueryEscape(cqlBase))
 
@@ -380,34 +434,10 @@ func (c *Client) FindQAPagesForModule(module, spaceKey string) ([]Page, error) {
 
 // FindQAKanbanPage searches for an existing QA Kanban consolidated page by period label.
 func (c *Client) FindQAKanbanPage(period, spaceKey string) (*Page, error) {
-	title := fmt.Sprintf("Consolidado de Pruebas QA - %s", period)
-	path := fmt.Sprintf("/wiki/api/v2/pages?title=%s&limit=1", url.QueryEscape(title))
-	if spaceKey != "" {
-		path += "&space-key=" + url.QueryEscape(spaceKey)
-	}
-
-	body, err := c.Get(path)
-	if err != nil {
-		return nil, fmt.Errorf("error buscando página QA Kanban: %w", err)
-	}
-
-	var result struct {
-		Results []pageResponse `json:"results"`
-	}
-	if err := json.Unmarshal(body, &result); err != nil {
-		return nil, fmt.Errorf("error parseando respuesta: %w", err)
-	}
-
-	if len(result.Results) == 0 {
-		return nil, nil
-	}
-
-	r := result.Results[0]
-	return &Page{
-		ID:     r.ID,
-		Title:  r.Title,
-		WebURL: c.BaseURL + "/wiki" + r.Links.WebUI,
-	}, nil
+	return c.findPageByExactTitle(
+		fmt.Sprintf("Consolidado de Pruebas QA - %s", period),
+		spaceKey,
+	)
 }
 
 // marshalADF serializes the ADF document to a JSON string.

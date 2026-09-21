@@ -17,6 +17,21 @@ type ProjectConfig struct {
 	VCSHost            string `yaml:"vcs_host,omitempty"`
 	VCSOrg             string `yaml:"vcs_org,omitempty"`
 	ConfluenceSpaceKey string `yaml:"confluence_space_key,omitempty"`
+
+	// DeployChecklist overrides the global one for this project. The steps are
+	// stack-specific (a Laravel backend and a Node one need different
+	// commands), which is why the per-project layer exists.
+	DeployChecklist []string `yaml:"deploy_checklist,omitempty"`
+}
+
+// QAReportConfig holds the names printed in the header of the QA consolidated
+// report. They are organization data, not code: a change of personnel must not
+// require a new release, and the names must not be embedded in a binary that
+// gets distributed. See docs/security/patrones-seguros.md (P-008).
+type QAReportConfig struct {
+	LiderTecnico string `yaml:"lider_tecnico,omitempty"`
+	PMO          string `yaml:"pmo,omitempty"`
+	QA           string `yaml:"qa,omitempty"`
 }
 
 // Config holds all configuration needed by the CLI.
@@ -26,9 +41,27 @@ type Config struct {
 	AtlassianToken     string                    `yaml:"atlassian_token"`
 	BaseURL            string                    `yaml:"base_url"`
 	QAEmail            string                    `yaml:"qa_email,omitempty"`
+	QAReport           *QAReportConfig           `yaml:"qa_report,omitempty"`
 	ConfluenceSpaceKey string                    `yaml:"confluence_space_key,omitempty"`
 	DefaultProject     string                    `yaml:"default_project,omitempty"`
 	Projects           map[string]*ProjectConfig `yaml:"projects,omitempty"`
+
+	// DeployChecklist are the steps of the "A considerar" section of a new
+	// deploy document. A project's own list wins over this one; when both are
+	// empty a generic built-in default is used. Steps tied to one stack
+	// ("php artisan migrate") belong here, not compiled into the binary that
+	// other teams run. See docs/security/patrones-seguros.md (P-008).
+	DeployChecklist []string `yaml:"deploy_checklist,omitempty"`
+}
+
+// ResolveDeployChecklist returns the checklist for the given project, applying
+// the layering: project list > global list > nil (the document builder then
+// falls back to its generic default).
+func (c *Config) ResolveDeployChecklist(proj *ProjectConfig) []string {
+	if proj != nil && len(proj.DeployChecklist) > 0 {
+		return proj.DeployChecklist
+	}
+	return c.DeployChecklist
 }
 
 // Load loads config following priority: env vars > config file.
@@ -53,6 +86,12 @@ func Load() (*Config, error) {
 		}
 		if cfg.QAEmail == "" {
 			cfg.QAEmail = fileCfg.QAEmail
+		}
+		if cfg.QAReport == nil {
+			cfg.QAReport = fileCfg.QAReport
+		}
+		if len(cfg.DeployChecklist) == 0 {
+			cfg.DeployChecklist = fileCfg.DeployChecklist
 		}
 		if cfg.ConfluenceSpaceKey == "" {
 			cfg.ConfluenceSpaceKey = fileCfg.ConfluenceSpaceKey

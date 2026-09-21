@@ -102,7 +102,7 @@ func printUsage() {
 	fmt.Print("    Rutas locales backend/frontend\n")
 	fmt.Print("    Nombres de repositorios\n")
 	fmt.Print("    VCS host  (ej: https://bitbucket.org)\n")
-	fmt.Print("    VCS org   (ej: devtyt)\n\n")
+	fmt.Print("    VCS org   (ej: mi-organizacion)\n\n")
 	fmt.Print("  Todo se guarda en " + clCyan + "~/.config/gtt/config.yaml" + clReset + "\n")
 	fmt.Print("  Las variables de entorno tienen prioridad sobre el archivo:\n")
 	fmt.Print("    ATLASSIAN_EMAIL, ATLASSIAN_TOKEN, ATLASSIAN_BASE_URL, CONFLUENCE_SPACE_KEY\n\n")
@@ -123,6 +123,9 @@ func printUsage() {
 	fmt.Print("  Prioridad de " + clBold + "--vcs-host / --vcs-org" + clReset + ":\n")
 	fmt.Print("    1. Flags --vcs-host / --vcs-org en el comando\n")
 	fmt.Print("    2. vcs_host / vcs_org del proyecto en config.yaml\n\n")
+	fmt.Print("  Sección " + clBold + "\"A considerar\"" + clReset + ":\n")
+	fmt.Print("    Al " + clBold + "crear" + clReset + "   — pasos de deploy_checklist (proyecto > global > default genérico)\n")
+	fmt.Print("    Al " + clBold + "actualizar" + clReset + " — se preserva tal como quedó editada en Confluence\n\n")
 
 	// ── qa ───────────────────────────────────────────────────────────────────
 	fmt.Print(clBold + "Flags de qa:\n" + clReset)
@@ -135,6 +138,12 @@ func printUsage() {
 	fmt.Print("  Prioridad de " + clBold + "--space" + clReset + " (misma lógica que generate):\n")
 	fmt.Print("    1. Flag --space en el comando\n")
 	fmt.Print("    2. confluence_space_key global en config.yaml\n\n")
+	fmt.Print("  Encabezado del reporte — se edita en " + clCyan + "~/.config/gtt/config.yaml" + clReset + ":\n")
+	fmt.Print("    qa_report:\n")
+	fmt.Print("      lider_tecnico: \"...\"\n")
+	fmt.Print("      pmo: \"...\"\n")
+	fmt.Print("      qa: \"...\"\n")
+	fmt.Print("    Las claves ausentes se publican como " + clBold + "—" + clReset + "\n\n")
 
 	// ── fetch ────────────────────────────────────────────────────────────────
 	fmt.Print(clBold + "Flags de fetch (gtt f):\n" + clReset)

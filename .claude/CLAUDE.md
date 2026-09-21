@@ -4,40 +4,134 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project does
 
-`deploy-doc` is a Go CLI that automates the creation of deployment documents in Confluence. Given a Jira issue key and one or two commit hashes (backend/frontend), it fetches changed files via `git show`, queries Jira for the issue title, and creates/updates a Confluence page with a structured ADF (Atlassian Document Format) table of changed files.
+`gtt` is a Go CLI that automates documentation in Atlassian for the deployment
+workflow. The repo directory and Go module are still named `deploy-doc` (the
+binary was renamed in v1.2.0); user-facing strings, binaries and the config
+directory all say `gtt`.
+
+Commands:
+
+| Command | What it does |
+|---|---|
+| `init` | Interactive wizard: credentials, default space, first project. Validates the token against `/rest/api/3/myself`. |
+| `g` / `gen` / `generate` | Creates or updates a deploy document in Confluence from a Jira issue key plus one or more commit hashes. |
+| `qa` | Builds the QA consolidated report in Confluence. Two modes: Sprint (`-s` + `-m`) and Kanban (no flags — last 10 business days). |
+| `f` / `fetch` | Exports a Confluence page to `.txt`, found by issue key. Opens a native save dialog. |
+| `project` | `list` / `ls`, `add`, `default`, `remove`. |
+| `update` | Self-update from GitHub Releases, with SHA-256 verification. |
+| `version`, `help` | — |
 
 ## Commands
 
 ```bash
-make build          # Compile binary to ./bin/deploy-doc
+make build          # Compile binary to ./bin/gtt
 make install        # Build + install to ~/.local/bin
 make run ARGS='...' # Run without compiling (dev mode)
-make lint           # go fmt + go vet
+make fmt            # go fmt
+make vet            # go vet
+make lint           # fmt + vet
+make test           # go test ./...
 make tidy           # go mod tidy
 make build-all      # Cross-compile for Linux, Windows, Mac
-make release        # lint + build-all + bump patch + git tag + gh release
+make release        # lint + build-all + checksums + bump patch + git tag + gh release
+make release-minor  # same, bumping minor
+make release-major  # same, bumping major
 ```
 
-There are no tests in this project currently.
+`make lint` does NOT run the tests — `make test` is separate. `make release`
+runs `lint` only.
+
+Go toolchain: `go.mod` declares `go 1.26.1`. Do not change that directive
+without checking what every developer and CI has installed.
 
 ## Architecture
 
-The flow for `deploy-doc generate` is:
+```
+cmd/            UI, flag parsing, orchestration, all stdin prompts
+internal/
+  config/       Config + ProjectConfig + QAReportConfig (YAML)
+  git/          git show --name-only, grouping, error translation
+  atlassian/    HTTP client (Basic Auth) + Jira v3 + Confluence v1/v2
+  document/     ADF construction and section preservation
+  installer/    Self-install on first run
+  updater/      Version check, cached notice, self-update
+  build/        Version var (ldflags)
+```
 
-1. **`cmd/generate.go`** — parses `--issue`, `--commit-backend`, `--commit-frontend` flags, orchestrates all steps, and handles user interaction (prompts via stdin)
-2. **`internal/config/config.go`** — loads credentials from env vars (`ATLASSIAN_EMAIL`, `ATLASSIAN_TOKEN`, `ATLASSIAN_BASE_URL`) or from `~/.config/deploy-doc/config.yaml`
-3. **`internal/git/git.go`** — runs `git show --name-only` in the CWD to get changed files, groups them by directory
-4. **`internal/atlassian/`** — thin HTTP client with Basic Auth (base64 email:token):
-   - `client.go`: shared `Get`/`Post`/`Put` methods
-   - `jira.go`: fetches issue summary via Jira REST API v3
-   - `confluence.go`: searches for existing docs via CQL, creates/updates pages via Confluence REST API v2
-5. **`internal/document/builder.go`** — builds the ADF JSON document from scratch using helper functions. The repo names `operativo-api` (backend) and `echo-logistics` (frontend) are **hardcoded** here in `runGenerate` and in `filesTable`. Bitbucket URLs are constructed as `https://bitbucket.org/devtyt/<repoName>`.
+The flow for `gtt generate`:
 
-**Self-install behavior**: When the binary is run for the first time from outside its install location, `main.go` calls `installer.Run()` to copy itself to `~/.local/bin` (Linux/Mac) or `%LOCALAPPDATA%\Programs\deploy-doc` (Windows) and add it to `PATH`. Running via `go run` skips this (detects `/go-build/` in path).
+1. **`cmd/generate.go`** — parses flags, resolves the project, orchestrates the
+   four steps, handles every prompt.
+2. **`internal/config/config.go`** — env vars take priority over
+   `~/.config/gtt/config.yaml`. `MigrateIfNeeded` moves a legacy
+   `~/.config/deploy-doc/config.yaml` on first run of v1.2.0+.
+3. **`internal/git/git.go`** — `GetChangedFilesMulti` runs `git show` in the
+   configured repo path (or the CWD), `GroupByDirectory` groups by parent dir,
+   `explainGitError` turns git's stderr into actionable instructions.
+4. **`internal/atlassian/`** — `client.go` (Get/Post/Put + status→message),
+   `jira.go`, `jira_qa.go`, `confluence.go`, `confluence_fetch.go`,
+   `storage_text.go`, `query.go`.
+5. **`internal/document/`** — `builder.go` (deploy doc ADF), `qa_builder.go`
+   (QA report ADF), `preserve.go` (reads a section back out of an existing doc).
+
+**Self-install behavior**: on first run from outside the install location,
+`main.go` asks for confirmation and then calls `installer.Run()` to copy itself
+to `~/.local/bin` (Linux/Mac) or `%LOCALAPPDATA%\Programs\gtt` (Windows) and add
+it to PATH. Running via `go run` skips this (detects `/go-build/` in the path).
+
+**Update notice**: served from `~/.config/gtt/version_check.json`, refreshed in
+the background at most once per 24h, suppressed when stdout is not a TTY or when
+`GTT_NO_UPDATE_CHECK` is set.
 
 ## Key constraints
 
-- The CLI uses **no third-party dependencies** — only stdlib. The router in `cmd/root.go` is a simple `map[string]func([]string)error`, not Cobra or similar.
-- The config file format is plain `key: value` (not YAML-parsed with a library), so only the three known keys are read.
-- `document/builder.go` constructs raw `map[string]any` for ADF — no typed structs. The ADF body is JSON-marshaled to a string and sent as the `body.value` field.
-- The `generate` command must be run from inside the target git repository, as it calls `git show` in the CWD.
+- **Dependencies**: `gopkg.in/yaml.v3` and `golang.org/x/sys` (Windows registry)
+  only. The command router in `cmd/root.go` is a `map[string]func([]string) error`,
+  not Cobra. Keep it that way unless there is a strong reason.
+- **ADF is raw `map[string]any`** — no typed structs. The body is JSON-marshaled
+  to a string and sent as `body.value` with `representation: atlas_doc_format`.
+- **Confluence v2 filters spaces by numeric `space-id`, never `space-key`.**
+  An unknown query param is ignored silently, so a wrong name turns the filter
+  into a no-op. Resolve keys with `ResolveSpaceID`.
+- **Every value interpolated into JQL or CQL must go through
+  `atlassian.quoteLiteral`.** Never place a value inside hand-written quotes in
+  a format string.
+- **`generate` replaces the whole page body on update.** Anything a user edits
+  by hand in Confluence is lost unless it is read back and re-emitted — see
+  `document.ExtractSection` and `DeployDoc.PreservedConsider`. If the previous
+  body cannot be read, do not overwrite: warn and ask.
+- **Never render a failed lookup as a failed check** in the QA report. It is
+  published as evidence; use the unknown state (`QAIssue.DeployDocUnknown`).
+- **No corporate data in the source.** Instance URLs, space keys, repo names,
+  VCS org, personal names and the deploy checklist live in config
+  (`qa_report`, `deploy_checklist` — the latter also per project), with a CLI
+  flag to override where one makes sense. The layering is documented in
+  `docs/security/patrones-seguros.md`, which is the authority on this — read it
+  before adding any new value. That includes example values in help text: a
+  workspace name is topology (P-001), not a scanner false positive (P-007).
+- **Report a discarded error whose effect is delayed.** `CreateJiraRemoteLink`
+  failing is not fatal, but `qa` verifies that very link — silence there
+  resurfaces weeks later as a task wrongly flagged as undocumented. See
+  `linkIssueToDoc`.
+- The `qa` command's `qa_email` gate is a UX guardrail, not access control: it
+  reads from the user's own config. Real authorization is Atlassian permissions.
+
+## Testing
+
+`go test ./...` covers pure functions only — no HTTP mocking of Atlassian.
+Covered: `document.ExtractSection` and `Build`, `commitFileURL`, `BuildTitle`,
+`atlassian.quoteLiteral`, `parseDevTaskKey`, `BuildReviewMap`, `businessDaysAgo`,
+`updater.isNewer`, `git.GroupByDirectory`, `explainGitError`, `cmd.parseFlags`,
+`splitHashes`, `sanitizeFilename`.
+
+Anything touching the network is verified by hand against a real instance;
+`--dry-run` on `generate` and `qa` prints the ADF without publishing.
+
+## Docs
+
+- `docs/arquitectura.md` — architecture notes
+- `docs/guia-de-usuario.md` — end-user guide
+- `docs/bitacora/` — one entry per version: Solicitud → Motivación → Diseño
+  técnico → Archivos → Cómo verificar. Add an entry for every release.
+- `docs/security/patrones-seguros.md` — secure patterns P-001..P-008. Add a new
+  pattern whenever a review finds an anti-pattern.

@@ -2,7 +2,7 @@
 
 > **Documento vivo.** Cada vez que el equipo de seguridad o una revisión DevSecOps identifique un nuevo anti-patrón, debe agregarse aquí con su evidencia, solución y clasificación.
 >
-> **Última actualización:** 2026-05-04
+> **Última actualización:** 2026-09-21
 > **Origen inicial:** Reporte DevSecOps v1.1.4 — `docs/issues/desarrollo15.html`
 
 ---
@@ -18,12 +18,13 @@
 | [P-005](#p-005) | Resolver ruta absoluta antes de exec.Command | MEDIUM | OWASP A03 / T1059 |
 | [P-006](#p-006) | Verificar integridad de binarios descargados | HIGH | OWASP A08 / T1105 |
 | [P-007](#p-007) | Strings de ayuda en binario — falso positivo de scanner | INFO | T1552 |
+| [P-008](#p-008) | Nombres de personas y datos de la organización fuera del binario | MEDIUM | OWASP A01 / T1591 |
 
 ---
 
 ## Contexto del proyecto
 
-Esta herramienta no usa archivo `.env`. El único mecanismo de persistencia de configuración es `~/.config/deploy-doc/config.yaml`. Por eso el diseño de cada patrón debe contemplar **dos dimensiones**:
+Esta herramienta no usa archivo `.env`. El único mecanismo de persistencia de configuración es `~/.config/gtt/config.yaml` (hasta v1.1.x fue `~/.config/deploy-doc/config.yaml`; v1.2.0+ migra automáticamente). Por eso el diseño de cada patrón debe contemplar **dos dimensiones**:
 
 1. **Seguridad:** el valor no puede estar quemado en el código fuente ni en el binario.
 2. **Practicidad:** el usuario no puede tener que editar el YAML cada vez que necesita usar un valor diferente.
@@ -419,6 +420,73 @@ Los scanners de binarios buscan patrones como `token`, `password`, `secret` en l
 #### Regla
 
 > Nunca incluir secretos reales (tokens, passwords, API keys) en el código fuente ni en constantes. Los textos de ayuda que *mencionen* las palabras `token` o `password` son normales y no representan un riesgo. Cuando el scanner los reporte, documentar la excepción con evidencia del contexto (línea de código o string exacto encontrado) en el ticket de seguridad correspondiente.
+
+---
+
+## P-008
+
+### Nombres de personas y datos de la organización fuera del binario
+
+**Severidad:** MEDIUM
+**OWASP:** A01:2021-Broken Access Control (exposición de información)
+**MITRE:** T1591 — Gather Victim Org Information
+
+#### Por qué es un problema
+
+Es la misma raíz que P-001 y P-003, aplicada a datos de personas en lugar de URLs. Los nombres del Líder Técnico, PMO y QA estaban compilados dentro del ejecutable de `gtt`:
+
+1. **Exposición.** Los binarios se publican en GitHub Releases. `strings gtt-linux-amd64 | grep -i ...` entrega el organigrama parcial del área de desarrollo a cualquiera que descargue el release. Es material de reconocimiento previo a un ataque de ingeniería social o phishing dirigido.
+2. **Operativo.** Un cambio de personal, una vacación o una reasignación obliga a compilar y publicar una versión nueva del CLI. El dato pertenece al entorno, no al programa.
+3. **Datos personales.** Nombres completos de empleados son datos personales; embeberlos en un artefacto distribuible es una decisión que debe ser deliberada, no un efecto secundario de escribir la plantilla del documento.
+
+#### Anti-patrón (lo que NO hacer)
+
+```go
+// internal/document/qa_builder.go
+tableRow([]any{
+    tableHeader(200, textNode("Líder Técnico")),
+    tableCell(560, textNode("Nombre Apellido")),   // ❌ quemado en el binario
+}),
+```
+
+#### Patrón correcto
+
+El valor vive en la capa de configuración, y ausente se muestra como `—`:
+
+```yaml
+# ~/.config/gtt/config.yaml
+qa_report:
+  lider_tecnico: "..."
+  pmo: "..."
+  qa: "..."
+```
+
+```go
+// internal/config/config.go
+type QAReportConfig struct {
+    LiderTecnico string `yaml:"lider_tecnico,omitempty"`
+    PMO          string `yaml:"pmo,omitempty"`
+    QA           string `yaml:"qa,omitempty"`
+}
+
+// internal/document/qa_builder.go
+tableCell(560, textNode(orDash(doc.LiderTecnico)))   // ✓ dato inyectado
+```
+
+#### En qué capa del sistema de prioridades vive
+
+```
+Config global (qa_report en config.yaml)   ← única capa
+  └── "—" si la clave falta               ← visible, no un placeholder falso
+```
+
+No lleva flag de override ni prompt en `gtt init`: son tres valores estables que solo afectan al usuario QA, y agregarlos al wizard sería ruido para el resto del equipo. Se editan directamente en el YAML, igual que `qa_email`. Si en el futuro el reporte se genera para varios equipos, la capa natural a agregar es `ProjectConfig`.
+
+El fallback es `—` y no un nombre por defecto: un placeholder que parece un dato real es peor que un vacío, porque se publica en Confluence como si estuviera verificado.
+
+#### Regla
+
+> Ningún nombre de persona, cargo, cliente, proveedor o identificador de la organización puede aparecer como literal en el código fuente. Si un documento generado necesita ese dato, se inyecta desde `config.yaml` y ausente se renderiza como `—`. Antes de escribir un literal en una plantilla, preguntarse si cambiaría al cambiar de persona, de equipo o de cliente: si la respuesta es sí, es configuración.
 
 ---
 

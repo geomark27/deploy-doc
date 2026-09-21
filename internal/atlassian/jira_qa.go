@@ -3,8 +3,30 @@ package atlassian
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
+)
+
+// Identifiers specific to one Jira configuration. They are NOT portable: the
+// project key, the workflow status ids and the custom field ids all belong to
+// the instance this command was written for. They are grouped and named here
+// so they are findable and changeable in one place instead of being spread
+// across the JQL strings below.
+//
+// They stay in code deliberately: the qa command is single-tenant by design
+// (one project, one QA user), and custom field ids cannot be expressed
+// portably. See docs/security/patrones-seguros.md (P-008).
+const (
+	qaJiraProject = "APP"
+
+	// Finalizada (10001), Testing (10002), En Revisión (10003),
+	// Pase a Producción (10004).
+	qaStatusIDs = "10001, 10002, 10003, 10004"
+
+	fieldNovedades  = "customfield_10498" // Contador de novedades
+	fieldReprocesos = "customfield_10134" // Conteo de reprocesos
+	fieldDevStatus  = "customfield_10000" // Development — estado del PR
 )
 
 // QAIssue holds the evaluation data for one task in the QA consolidated report.
@@ -12,13 +34,19 @@ type QAIssue struct {
 	Key             string
 	URL             string
 	Summary         string
-	HasCodingErrors bool   // Contador de novedades (customfield_10498) > 0
-	HasDevReturns   bool   // Conteo de reprocesos (customfield_10134) > 0
+	HasCodingErrors bool   // Contador de novedades (fieldNovedades) > 0
+	HasDevReturns   bool   // Conteo de reprocesos (fieldReprocesos) > 0
 	HasDeployDoc    bool   // has a remote link titled "Documento de Despliegue..."
-	PRMerged        bool   // PR state = MERGED (customfield_10000)
+	PRMerged        bool   // PR state = MERGED (fieldDevStatus)
 	Observations    string // text after "::" in comments matching "Novedad::"
 	ReviewTaskKey   string // QA review task key (e.g. APP-2160)
 	ReviewTaskURL   string // QA review task URL
+
+	// DeployDocUnknown is set when the remote-link lookup failed, so the
+	// report can say "unverified" instead of claiming the document is
+	// missing. This table is published as QA evidence: a network or
+	// permission error must never be rendered as a failed check.
+	DeployDocUnknown bool
 }
 
 type jiraSearchResponse struct {
@@ -33,8 +61,8 @@ type jiraSearchResponse struct {
 // Includes Testing (10002), En Revisión (10003), Finalizada (10001) and Pase a Producción (10004).
 func (c *Client) GetQATasksForReview(sprintName, module string) ([]QAIssue, error) {
 	jql := fmt.Sprintf(
-		`project = APP AND sprint = "%s" AND status in (10001, 10002, 10003, 10004) AND component = "%s" ORDER BY key ASC`,
-		sprintName, module,
+		`project = %s AND sprint = %s AND status in (%s) AND component = %s ORDER BY key ASC`,
+		qaJiraProject, quoteLiteral(sprintName), qaStatusIDs, quoteLiteral(module),
 	)
 	all, err := c.searchQAIssues(jql)
 	if err != nil {
@@ -59,12 +87,12 @@ func (c *Client) GetQATasksAsAssignee(sprintName, qaEmail string) ([]QAIssue, er
 	if qaEmail != "" {
 		accountID, err := c.resolveAccountID(qaEmail)
 		if err == nil && accountID != "" {
-			assignee = fmt.Sprintf("%q", accountID)
+			assignee = quoteLiteral(accountID)
 		}
 	}
 	jql := fmt.Sprintf(
-		`project = APP AND sprint = "%s" AND assignee = %s ORDER BY key ASC`,
-		sprintName, assignee,
+		`project = %s AND sprint = %s AND assignee = %s ORDER BY key ASC`,
+		qaJiraProject, quoteLiteral(sprintName), assignee,
 	)
 	return c.searchQAIssues(jql)
 }
@@ -81,15 +109,19 @@ func BuildReviewMap(qaTasks []QAIssue) map[string]QAIssue {
 	return m
 }
 
-// parseDevTaskKey extracts the dev task key from a QA review task summary.
-// e.g. "Revisión de Tarea - APP-1257" → "APP-1257"
+// issueKeyRe matches a Jira issue key: a project key followed by a number.
+var issueKeyRe = regexp.MustCompile(`[A-Z][A-Z0-9]*-\d+`)
+
+// parseDevTaskKey extracts the dev task key from a QA review task summary,
+// e.g. "Revisión de Tarea - APP-1257" → "APP-1257".
+//
+// The first key in the summary wins: the descriptive prefix never contains one,
+// so the first match is the task under review even when a trailing note
+// mentions another key. Splitting on "-" instead — as this used to — broke on
+// any summary with a suffix ("… - APP-1257 - ajuste" yielded "1257 - ajuste")
+// and on an em dash.
 func parseDevTaskKey(summary string) string {
-	parts := strings.Split(summary, "-")
-	if len(parts) < 2 {
-		return ""
-	}
-	key := strings.TrimSpace(parts[len(parts)-2]) + "-" + strings.TrimSpace(parts[len(parts)-1])
-	return key
+	return issueKeyRe.FindString(strings.ToUpper(summary))
 }
 
 // resolveAccountID looks up the Jira accountId for a given email address.
@@ -110,7 +142,7 @@ func (c *Client) resolveAccountID(email string) (string, error) {
 func (c *Client) searchQAIssues(jql string) ([]QAIssue, error) {
 	payload := map[string]any{
 		"jql":        jql,
-		"fields":     []string{"key", "summary", "customfield_10498", "customfield_10134", "customfield_10000"},
+		"fields":     []string{"key", "summary", fieldNovedades, fieldReprocesos, fieldDevStatus},
 		"maxResults": 100,
 	}
 
@@ -135,17 +167,17 @@ func (c *Client) searchQAIssues(jql string) ([]QAIssue, error) {
 				qi.Summary = s
 			}
 		}
-		if v, ok := raw.Fields["customfield_10498"]; ok && v != nil {
+		if v, ok := raw.Fields[fieldNovedades]; ok && v != nil {
 			if n, ok := v.(float64); ok && n > 0 {
 				qi.HasCodingErrors = true
 			}
 		}
-		if v, ok := raw.Fields["customfield_10134"]; ok && v != nil {
+		if v, ok := raw.Fields[fieldReprocesos]; ok && v != nil {
 			if n, ok := v.(float64); ok && n > 0 {
 				qi.HasDevReturns = true
 			}
 		}
-		if v, ok := raw.Fields["customfield_10000"]; ok && v != nil {
+		if v, ok := raw.Fields[fieldDevStatus]; ok && v != nil {
 			if s, ok := v.(string); ok {
 				qi.PRMerged = strings.Contains(s, "state=MERGED")
 			}
@@ -157,11 +189,13 @@ func (c *Client) searchQAIssues(jql string) ([]QAIssue, error) {
 
 // GetNovedadComment returns the observation text from comments matching "Novedad::texto".
 // If multiple such comments exist they are joined with "; ".
-// Returns empty string (no error) when none are found.
+// Returns an empty string and a nil error when the issue simply has none; an
+// error means the comments could not be read and the result says nothing about
+// whether observations exist.
 func (c *Client) GetNovedadComment(issueKey string) (string, error) {
 	body, err := c.Get(fmt.Sprintf("/rest/api/3/issue/%s/comment?orderBy=-created&maxResults=50", issueKey))
 	if err != nil {
-		return "", nil
+		return "", fmt.Errorf("error leyendo comentarios de %s: %w", issueKey, err)
 	}
 
 	var resp struct {
@@ -170,7 +204,7 @@ func (c *Client) GetNovedadComment(issueKey string) (string, error) {
 		} `json:"comments"`
 	}
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", nil
+		return "", fmt.Errorf("error parseando comentarios de %s: %w", issueKey, err)
 	}
 
 	var parts []string
@@ -263,11 +297,17 @@ func (c *Client) GetQATasksAsAssigneeKanban(sinceDate, qaEmail string) ([]QAIssu
 	return c.searchQAIssues(jql)
 }
 
-// HasDeployDocLink returns true if the issue has a remote link titled "Documento de Despliegue...".
+// HasDeployDocLink returns true if the issue has a remote link titled
+// "Documento de Despliegue...".
+//
+// A false with a non-nil error means "could not check", not "no document":
+// the caller must distinguish them, because the answer lands in a QA report
+// published as evidence. Returning false on error — as this used to — marked
+// compliant tasks as missing their document whenever the API hiccuped.
 func (c *Client) HasDeployDocLink(issueKey string) (bool, error) {
 	body, err := c.Get(fmt.Sprintf("/rest/api/3/issue/%s/remotelink", issueKey))
 	if err != nil {
-		return false, nil
+		return false, fmt.Errorf("error leyendo enlaces remotos de %s: %w", issueKey, err)
 	}
 
 	var links []struct {
@@ -276,7 +316,7 @@ func (c *Client) HasDeployDocLink(issueKey string) (bool, error) {
 		} `json:"object"`
 	}
 	if err := json.Unmarshal(body, &links); err != nil {
-		return false, nil
+		return false, fmt.Errorf("error parseando enlaces remotos de %s: %w", issueKey, err)
 	}
 
 	for _, l := range links {

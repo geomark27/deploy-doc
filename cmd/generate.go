@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -49,10 +50,11 @@ func runGenerate(args []string) error {
 		return err
 	}
 
-	// Determine workDirs, repo names, and VCS info from project (or fallback defaults)
+	// Determine workDirs, repo names, and VCS info from the project.
+	// Repo names start empty on purpose: they belong to the user's environment,
+	// not to the binary. Unset, they are guessed from the clone directory below.
 	var backendWorkDir, frontendWorkDir string
-	backendRepo := "operativo-api"
-	frontendRepo := "echo-logistics"
+	var backendRepo, frontendRepo string
 	vcsHost := vcsHostFlag
 	vcsOrg := vcsOrgFlag
 
@@ -74,6 +76,17 @@ func runGenerate(args []string) error {
 		if resolvedName != "" {
 			fmt.Printf(clBold+"Proyecto: "+clReset+clCyan+"%s"+clReset+"\n\n", resolvedName)
 		}
+	}
+
+	// Guess any repo name the project did not provide, so the document never
+	// carries a repo name compiled into the binary.
+	if backendRepo == "" && len(backendHashes) > 0 {
+		backendRepo = repoNameFromDir(backendWorkDir)
+		warnLine(fmt.Sprintf("nombre del repo backend no configurado; se usará %q (tomado del directorio). Configúralo con 'gtt project add'.", backendRepo))
+	}
+	if frontendRepo == "" && len(frontendHashes) > 0 {
+		frontendRepo = repoNameFromDir(frontendWorkDir)
+		warnLine(fmt.Sprintf("nombre del repo frontend no configurado; se usará %q (tomado del directorio). Configúralo con 'gtt project add'.", frontendRepo))
 	}
 
 	if vcsHost == "" || vcsOrg == "" {
@@ -204,6 +217,39 @@ func runGenerate(args []string) error {
 	}
 	fmt.Println()
 
+	// --- Preserve the hand-edited "A considerar" section (issue #4) ---
+	// UpdatePage replaces the whole body, so whatever the deployment team wrote
+	// in that section is lost unless we read it back and splice it into the
+	// regenerated document. If we cannot read it we do NOT overwrite silently:
+	// a failure here is exactly the case where the loss goes unnoticed.
+	var preservedConsider []any
+	var existingFull *atlassian.PageADF
+	if updateExisting {
+		existingFull, err = client.GetPageADF(existingDoc.ID)
+		if err != nil {
+			return fmt.Errorf("no se pudo leer el documento actual; se cancela la actualización para no sobrescribir su contenido: %w", err)
+		}
+		if existingFull.ADF == nil {
+			warnLine("el documento actual no está en formato ADF; no se pudo leer la sección \"A considerar\".")
+		} else {
+			preservedConsider = document.ExtractSection(existingFull.ADF, document.ConsiderHeading)
+		}
+
+		if len(preservedConsider) > 0 {
+			okLine(fmt.Sprintf("sección %s preservada del documento actual", clr(clBold, "\"A considerar\"")))
+		} else {
+			warnLine("no se encontró contenido en \"A considerar\"; se usaría la plantilla por defecto.")
+			fmt.Print("  ¿Continuar de todas formas? [s/N]: ")
+			ans, _ := reader.ReadString('\n')
+			ans = strings.TrimSpace(strings.ToLower(ans))
+			if ans != "s" && ans != "si" && ans != "sí" {
+				fmt.Println("Cancelado.")
+				return nil
+			}
+		}
+		fmt.Println()
+	}
+
 	// --- Build ADF ---
 	adf := document.Build(document.DeployDoc{
 		IssueKey:       jiraIssue.Key,
@@ -217,6 +263,9 @@ func runGenerate(args []string) error {
 		FrontendRepo:   frontendRepo,
 		FrontendCommit: firstHash(frontendHashes),
 		FrontendFiles:  frontendFiles,
+
+		PreservedConsider: preservedConsider,
+		Checklist:         cfg.ResolveDeployChecklist(proj),
 	})
 
 	// --- Dry run: print ADF JSON and exit ---
@@ -242,15 +291,11 @@ func runGenerate(args []string) error {
 		}
 
 		stepLabel(4, 4, "Actualizando documento en Confluence...")
-		existingFull, err := client.GetPage(existingDoc.ID)
-		if err != nil {
-			return err
-		}
 		page, err := client.UpdatePage(existingFull.ID, title, existingFull.Version, adf)
 		if err != nil {
 			return err
 		}
-		_ = client.CreateJiraRemoteLink(issue, page.ID, page.WebURL, title)
+		linkIssueToDoc(client, issue, page, title)
 		okLine(clr(clGreen+clBold, "Documento actualizado!"))
 		fmt.Printf("\n  %s\n\n", clr(clCyan, page.WebURL))
 		return nil
@@ -312,10 +357,47 @@ func runGenerate(args []string) error {
 	if err != nil {
 		return err
 	}
-	_ = client.CreateJiraRemoteLink(issue, page.ID, page.WebURL, title)
+	linkIssueToDoc(client, issue, page, title)
 	okLine(clr(clGreen+clBold, "Documento creado!"))
 	fmt.Printf("\n  %s\n\n", clr(clCyan, page.WebURL))
 	return nil
+}
+
+// linkIssueToDoc creates the Jira remote link pointing at the published page.
+//
+// A failure is not fatal — the document exists, which is what the command is
+// for — but it must be reported, because the consequence is delayed and looks
+// like a different problem: `gtt qa` verifies exactly this link, so a silent
+// failure here resurfaces weeks later as a task flagged "sin documentación" in
+// a QA report, with the document sitting in Confluence all along.
+func linkIssueToDoc(client *atlassian.Client, issue string, page *atlassian.Page, title string) {
+	if err := client.CreateJiraRemoteLink(issue, page.ID, page.WebURL, title); err != nil {
+		warnLine(fmt.Sprintf("no se pudo enlazar el documento en %s: %v", issue, err))
+		warnLine("agrégalo a mano en Jira (Añadir enlace → Web link), o 'gtt qa' reportará la tarea sin documentación.")
+	}
+}
+
+// repoNameFromDir guesses a repository name from the directory the commits are
+// read from: the basename of a clone normally matches the repo name. workDir
+// empty means the current directory, which is where git runs in that case.
+//
+// This replaced two literal repo names belonging to one organization — data
+// that must not be compiled into a distributed binary. See
+// docs/security/patrones-seguros.md (P-001, P-008).
+func repoNameFromDir(workDir string) string {
+	dir := workDir
+	if dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "repo"
+		}
+		dir = wd
+	}
+	base := filepath.Base(filepath.Clean(dir))
+	if base == "." || base == string(filepath.Separator) {
+		return "repo"
+	}
+	return base
 }
 
 // firstHash returns the first element of a slice, or "" if empty.

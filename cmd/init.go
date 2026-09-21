@@ -160,7 +160,7 @@ func configureProject(reader *bufio.Reader, cfg *config.Config) error {
 	if err != nil {
 		return err
 	}
-	proj.VCSOrg, err = promptOptional(reader, "Organización/workspace VCS (ej: devtyt)")
+	proj.VCSOrg, err = promptOptional(reader, "Organización/workspace VCS (ej: mi-organizacion)")
 	if err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package document
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/geomark27/deploy-doc/internal/atlassian"
@@ -15,6 +16,12 @@ type QADoc struct {
 	Module  string
 	Tasks   []atlassian.QAIssue // Tabla Consolidada (Testing / En Revisión)
 	QATasks []atlassian.QAIssue // Resumen — tasks assigned to the QA user
+
+	// Names for the report header, read from config (qa_report). Empty values
+	// render as "—" rather than a placeholder that looks like real data.
+	LiderTecnico string
+	PMO          string
+	QA           string
 }
 
 // BuildQA constructs the ADF document for the QA consolidated report.
@@ -32,11 +39,11 @@ func BuildQA(doc QADoc) map[string]any {
 		"version": 1,
 		"content": []any{
 			heading(2, "Información General"),
-			qaInfoTable(periodHeader, periodValue),
+			qaInfoTable(periodHeader, periodValue, doc),
 			heading(2, "Tabla Consolidada"),
 			qaConsolidatedTable(doc.Tasks),
 			heading(2, "Resumen"),
-			qaResumenTable(len(doc.Tasks), doc.QATasks),
+			qaResumenTable(len(doc.Tasks)),
 			heading(3, "Consideraciones"),
 			qaEmptyBullet(),
 		},
@@ -53,7 +60,7 @@ func BuildQAKanbanTitle(period string) string {
 	return fmt.Sprintf("Consolidado de Pruebas QA - %s", period)
 }
 
-func qaInfoTable(periodHeader, periodValue string) map[string]any {
+func qaInfoTable(periodHeader, periodValue string, doc QADoc) map[string]any {
 	today := time.Now().Format("02 Jan 2006")
 	return table("full-width", 760, []any{
 		tableRow([]any{
@@ -62,21 +69,30 @@ func qaInfoTable(periodHeader, periodValue string) map[string]any {
 		}),
 		tableRow([]any{
 			tableHeader(200, textNode("Líder Técnico")),
-			tableCell(560, textNode("Andrés Gavilanes C.")),
+			tableCell(560, textNode(orDash(doc.LiderTecnico))),
 		}),
 		tableRow([]any{
 			tableHeader(200, textNode("PMO")),
-			tableCell(560, textNode("Aldo A. Padilla")),
+			tableCell(560, textNode(orDash(doc.PMO))),
 		}),
 		tableRow([]any{
 			tableHeader(200, textNode("QA")),
-			tableCell(560, textNode("Eliana Lissette Veliz Galarza")),
+			tableCell(560, textNode(orDash(doc.QA))),
 		}),
 		tableRow([]any{
 			tableHeader(200, textNode(periodHeader)),
 			tableCell(560, textNode(periodValue)),
 		}),
 	})
+}
+
+// orDash renders an unset value as an em dash, so a missing config key is
+// visibly empty in the published report instead of silently absent.
+func orDash(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "—"
+	}
+	return s
 }
 
 func qaConsolidatedTable(tasks []atlassian.QAIssue) map[string]any {
@@ -108,7 +124,7 @@ func qaConsolidatedTable(tasks []atlassian.QAIssue) map[string]any {
 			tableCell(150, inlineCard(t.URL)),
 			tableCell(120, qaEmoji(!t.HasCodingErrors)),
 			tableCell(120, qaEmoji(!t.HasDevReturns)),
-			tableCell(120, qaEmoji(t.HasDeployDoc)),
+			tableCell(120, qaCheck(t.HasDeployDoc, t.DeployDocUnknown)),
 			tableCell(120, qaEmoji(t.PRMerged)),
 			obsCell,
 			reviewCell,
@@ -117,7 +133,7 @@ func qaConsolidatedTable(tasks []atlassian.QAIssue) map[string]any {
 	return table("full-width", 800, rows)
 }
 
-func qaResumenTable(totalTasks int, _ []atlassian.QAIssue) map[string]any {
+func qaResumenTable(totalTasks int) map[string]any {
 	return table("full-width", 760, []any{
 		tableRow([]any{
 			tableHeader(200, textNode("Total de Tareas")),
@@ -128,6 +144,18 @@ func qaResumenTable(totalTasks int, _ []atlassian.QAIssue) map[string]any {
 			qaTableCellEmpty(560),
 		}),
 	})
+}
+
+// qaCheck renders a verification whose answer may be unknown. An unverified
+// check shows "?" instead of a cross: a failed lookup is not evidence that the
+// task lacks its document, and this table is published as QA evidence. Plain
+// text rather than an emoji, so it renders regardless of which emoji set the
+// Confluence instance resolves.
+func qaCheck(ok, unknown bool) map[string]any {
+	if unknown {
+		return textNode("?")
+	}
+	return qaEmoji(ok)
 }
 
 func qaEmoji(ok bool) map[string]any {

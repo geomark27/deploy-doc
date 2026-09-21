@@ -12,13 +12,23 @@ type DeployDoc struct {
 	IssueSummary   string
 	IssueURL       string
 	VCSHost        string // e.g. "https://bitbucket.org"
-	VCSOrg         string // e.g. "devtyt"
+	VCSOrg         string // e.g. "mi-organizacion"
 	BackendRepo    string
 	BackendCommit  string
 	BackendFiles   map[string][]string // dir -> []filename
 	FrontendRepo   string
 	FrontendCommit string
 	FrontendFiles  map[string][]string // dir -> []filename
+
+	// PreservedConsider holds the "A considerar" nodes read back from the page
+	// being updated. When non-empty they are emitted verbatim instead of the
+	// default checklist, so content edited by hand in Confluence is not lost.
+	// Empty on creation, where the template is what we want.
+	PreservedConsider []any
+
+	// Checklist are the steps of the "A considerar" section for a new document,
+	// from config. Empty falls back to defaultChecklist.
+	Checklist []string
 }
 
 // Build constructs the ADF document as a map ready to be sent to Confluence.
@@ -43,9 +53,15 @@ func Build(doc DeployDoc) map[string]any {
 		content = append(content, filesTable(doc.BackendRepo, doc.BackendCommit, doc.BackendFiles, doc.VCSHost, doc.VCSOrg))
 	}
 
-	// A considerar section
-	content = append(content, heading(2, "A considerar:"))
-	content = append(content, considerTable())
+	// A considerar section. The heading is always ours (it is the anchor used
+	// to find the section again on the next update); only the body below it is
+	// carried over from the existing page when there is one.
+	content = append(content, heading(2, ConsiderHeading+":"))
+	if len(doc.PreservedConsider) > 0 {
+		content = append(content, doc.PreservedConsider...)
+	} else {
+		content = append(content, considerTable(doc.Checklist))
+	}
 
 	return map[string]any{
 		"type":    "doc",
@@ -126,8 +142,7 @@ func filesTable(repoName, commitHash string, files map[string][]string, vcsHost,
 				filePath = fname
 			}
 			fileItems = append(fileItems, bulletItem(textNode(fname)))
-			if repoURL != "" {
-				commitURL := fmt.Sprintf("%s/commits/%s#chg-%s", repoURL, commitHash, filePath)
+			if commitURL := commitFileURL(vcsHost, repoURL, commitHash, filePath); commitURL != "" {
 				linkItems = append(linkItems, bulletItem(linkText("link", commitURL)))
 			} else {
 				linkItems = append(linkItems, bulletItem(textNode("—")))
@@ -146,12 +161,58 @@ func filesTable(repoName, commitHash string, files map[string][]string, vcsHost,
 	return table("default", 1800, rows)
 }
 
-// considerTable builds the "A considerar" task list table.
-func considerTable() map[string]any {
-	tasks := []any{
-		taskItem("Pasar backend al servidor"),
-		taskItem("Ejecutar php artisan migrate"),
-		taskItem("Pasar frontend"),
+// commitFileURL builds a link to a changed file inside a commit. The shape is
+// host-specific, so the host is matched explicitly instead of assuming one:
+//
+//	Bitbucket  /commits/<hash>#chg-<path>   — per-file anchor
+//	GitHub     /commit/<hash>               — singular path; its per-file anchor
+//	                                          is a digest of the path we cannot
+//	                                          reproduce here, so it is omitted
+//	GitLab     /-/commit/<hash>
+//
+// An unrecognized host returns "" and the caller renders no link. That is
+// deliberate: emitting a Bitbucket-shaped URL for every host — as this used to
+// — put dead links in the document, which is worse than none, because a reader
+// cannot tell a dead link from a wrong one.
+func commitFileURL(vcsHost, repoURL, commitHash, filePath string) string {
+	if repoURL == "" || commitHash == "" {
+		return ""
+	}
+	host := strings.ToLower(vcsHost)
+	switch {
+	case strings.Contains(host, "bitbucket"):
+		return fmt.Sprintf("%s/commits/%s#chg-%s", repoURL, commitHash, filePath)
+	case strings.Contains(host, "github"):
+		return fmt.Sprintf("%s/commit/%s", repoURL, commitHash)
+	case strings.Contains(host, "gitlab"):
+		return fmt.Sprintf("%s/-/commit/%s", repoURL, commitHash)
+	default:
+		return ""
+	}
+}
+
+// defaultChecklist is used when no deploy_checklist is configured. The steps
+// are deliberately generic: "php artisan migrate" — what this used to emit —
+// assumes a Laravel backend, and a step tied to one stack does not belong in a
+// binary other teams run. Configure the real steps with deploy_checklist.
+var defaultChecklist = []string{
+	"Pasar backend al servidor",
+	"Ejecutar migraciones",
+	"Pasar frontend",
+}
+
+// considerTable builds the "A considerar" task list table from the configured
+// checklist, falling back to defaultChecklist when none is set.
+func considerTable(checklist []string) map[string]any {
+	if len(checklist) == 0 {
+		checklist = defaultChecklist
+	}
+
+	tasks := make([]any, 0, len(checklist))
+	for i, step := range checklist {
+		if step = strings.TrimSpace(step); step != "" {
+			tasks = append(tasks, taskItem(step, i))
+		}
 	}
 
 	return table("default", 1800, []any{
@@ -279,13 +340,16 @@ func bulletItem(content map[string]any) map[string]any {
 	}
 }
 
-func taskItem(text string) map[string]any {
-	id := strings.ReplaceAll(strings.ToLower(text), " ", "-")
+// taskItem builds one checkbox. localId is positional rather than derived from
+// the text: the text now comes from config and can contain anything, and the id
+// only has to be unique within the list. Existing documents are unaffected —
+// their section is preserved verbatim, never rebuilt.
+func taskItem(text string, idx int) map[string]any {
 	return map[string]any{
 		"type": "taskItem",
 		"attrs": map[string]any{
 			"state":   "TODO",
-			"localId": id,
+			"localId": fmt.Sprintf("task-%d", idx+1),
 		},
 		"content": []any{textNode(text)},
 	}
