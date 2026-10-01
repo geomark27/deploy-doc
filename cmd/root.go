@@ -45,6 +45,7 @@ var commands = map[string]func([]string) error{
 	"qa":       runQA,
 	"fetch":    runFetch,
 	"f":        runFetch,
+	"backlog":  runBacklog,
 }
 
 // Execute is the entry point for the CLI.
@@ -88,6 +89,7 @@ func printUsage() {
 	fmt.Print("  qa                Genera consolidado de pruebas QA en Confluence\n")
 	fmt.Print("  f, fetch          Exporta una página de Confluence a .txt por issue key\n")
 	fmt.Print("  project           Gestiona proyectos: list, add, default, remove\n")
+	fmt.Print("  backlog scan      Detecta deuda técnica en un repo local (sin credenciales)\n")
 	fmt.Print("  update            Actualiza gtt a la última versión\n")
 	fmt.Print("  version           Muestra la versión instalada\n\n")
 
@@ -169,6 +171,9 @@ func printUsage() {
 	fmt.Print("  gtt fetch -i APP-1981\n")
 	fmt.Print("  gtt f -i APP-1981 -o mi_tarea.txt\n")
 	fmt.Print("  gtt f -i APP-1981 --space PA\n")
+	fmt.Print("\n  " + clBold + "# Backlog técnico (más flags: gtt backlog):" + clReset + "\n")
+	fmt.Print("  gtt backlog scan\n")
+	fmt.Print("  gtt backlog scan -p echo -r frontend --since 30d --json\n")
 	fmt.Print("\n  " + clBold + "# Otros:" + clReset + "\n")
 	fmt.Print("  gtt init\n")
 	fmt.Print("  gtt update\n\n")

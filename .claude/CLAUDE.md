@@ -19,6 +19,7 @@ Commands:
 | `f` / `fetch` | Exports a Confluence page to `.txt`, found by issue key. Opens a native save dialog. |
 | `project` | `list` / `ls`, `add`, `default`, `remove`. |
 | `update` | Self-update from GitHub Releases, with SHA-256 verification. |
+| `backlog scan` | Detects technical debt in a local repo (hotspots by churn, markers, large files, untested classes, `composer audit` with `--deps`). Read-only, offline by default, needs no Atlassian credentials (`config.LoadLocal`). |
 | `version`, `help` | — |
 
 ## Commands
@@ -52,6 +53,7 @@ internal/
   config/       Config + ProjectConfig + QAReportConfig (YAML)
   git/          git show --name-only, grouping, error translation
   atlassian/    HTTP client (Basic Auth) + Jira v3 + Confluence v1/v2
+  backlog/      Debt detectors over git history and tracked files (no network)
   document/     ADF construction and section preservation
   installer/    Self-install on first run
   updater/      Version check, cached notice, self-update
@@ -123,7 +125,14 @@ Covered: `document.ExtractSection` and `Build`, `commitFileURL`, `BuildTitle`,
 `atlassian.quoteLiteral`, `parseDevTaskKey`, `BuildReviewMap`, `businessDaysAgo`,
 `updater.isNewer`, `git.GroupByDirectory`, `explainGitError`, `cmd.parseFlags`,
 `splitHashes`, `sanitizeFilename`, `StorageToText`, `BuildIssueTxt`,
-`config.Load` / `LoadLocal` (isolated from the real config.yaml with a temp HOME).
+`config.Load` / `LoadLocal` (isolated from the real config.yaml with a temp HOME),
+the `backlog` detectors and ranking, plus one end-to-end `backlog.Scan` over a
+throwaway git repo (skipped when git is not installed).
+
+**Never run a built binary to try a change** (`go build -o x && ./x`): run from
+outside the install dir, `main.go` asks to self-install and an empty stdin
+answers yes, overwriting the user's installed `gtt`. Use `go run .`, which the
+installer skips (`/go-build/` in the path).
 
 Anything touching the network is verified by hand against a real instance;
 `--dry-run` on `generate` and `qa` prints the ADF without publishing.
