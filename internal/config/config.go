@@ -1,7 +1,9 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -64,51 +66,86 @@ func (c *Config) ResolveDeployChecklist(proj *ProjectConfig) []string {
 	return c.DeployChecklist
 }
 
-// Load loads config following priority: env vars > config file.
+// Load loads config following priority: env vars > config file, and requires
+// the Atlassian credentials. Commands that never call Atlassian (they only read
+// local repos) use LoadLocal instead, so they work before `gtt init`.
 func Load() (*Config, error) {
-	cfg := &Config{
+	cfg, err := LoadLocal()
+	if err != nil {
+		return nil, err
+	}
+
+	if !cfg.HasAtlassianCredentials() {
+		return nil, fmt.Errorf("configuración incompleta. Corre: gtt init")
+	}
+
+	return cfg, nil
+}
+
+// LoadLocal loads config with the same priority as Load (env vars > config
+// file) without requiring the Atlassian credentials. A missing config file is
+// not an error: env vars and each command's defaults still apply. A file that
+// exists but cannot be read or parsed is, so a typo in config.yaml is reported
+// instead of being silently ignored.
+func LoadLocal() (*Config, error) {
+	cfg := configFromEnv()
+
+	fileCfg, err := loadFromFile()
+	if err != nil {
+		return nil, err
+	}
+	if fileCfg != nil {
+		mergeMissing(cfg, fileCfg)
+	}
+
+	return cfg, nil
+}
+
+// HasAtlassianCredentials reports whether email, token and base URL are all set.
+func (c *Config) HasAtlassianCredentials() bool {
+	return c.AtlassianEmail != "" && c.AtlassianToken != "" && c.BaseURL != ""
+}
+
+// configFromEnv builds the env var layer of the config.
+func configFromEnv() *Config {
+	return &Config{
 		AtlassianEmail:     os.Getenv("ATLASSIAN_EMAIL"),
 		AtlassianToken:     os.Getenv("ATLASSIAN_TOKEN"),
 		BaseURL:            os.Getenv("ATLASSIAN_BASE_URL"),
 		ConfluenceSpaceKey: os.Getenv("CONFLUENCE_SPACE_KEY"),
 	}
+}
 
-	// Always merge from file so all fields are loaded regardless of env vars.
-	if fileCfg, err := loadFromFile(); err == nil {
-		if cfg.AtlassianEmail == "" {
-			cfg.AtlassianEmail = fileCfg.AtlassianEmail
-		}
-		if cfg.AtlassianToken == "" {
-			cfg.AtlassianToken = fileCfg.AtlassianToken
-		}
-		if cfg.BaseURL == "" {
-			cfg.BaseURL = fileCfg.BaseURL
-		}
-		if cfg.QAEmail == "" {
-			cfg.QAEmail = fileCfg.QAEmail
-		}
-		if cfg.QAReport == nil {
-			cfg.QAReport = fileCfg.QAReport
-		}
-		if len(cfg.DeployChecklist) == 0 {
-			cfg.DeployChecklist = fileCfg.DeployChecklist
-		}
-		if cfg.ConfluenceSpaceKey == "" {
-			cfg.ConfluenceSpaceKey = fileCfg.ConfluenceSpaceKey
-		}
-		if cfg.DefaultProject == "" {
-			cfg.DefaultProject = fileCfg.DefaultProject
-		}
-		if cfg.Projects == nil {
-			cfg.Projects = fileCfg.Projects
-		}
+// mergeMissing fills every field still empty in cfg with the value from the
+// file. Fields already set (by env vars) win.
+func mergeMissing(cfg, fileCfg *Config) {
+	if cfg.AtlassianEmail == "" {
+		cfg.AtlassianEmail = fileCfg.AtlassianEmail
 	}
-
-	if cfg.AtlassianEmail == "" || cfg.AtlassianToken == "" || cfg.BaseURL == "" {
-		return nil, fmt.Errorf("configuración incompleta. Corre: gtt init")
+	if cfg.AtlassianToken == "" {
+		cfg.AtlassianToken = fileCfg.AtlassianToken
 	}
-
-	return cfg, nil
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = fileCfg.BaseURL
+	}
+	if cfg.QAEmail == "" {
+		cfg.QAEmail = fileCfg.QAEmail
+	}
+	if cfg.QAReport == nil {
+		cfg.QAReport = fileCfg.QAReport
+	}
+	if len(cfg.DeployChecklist) == 0 {
+		cfg.DeployChecklist = fileCfg.DeployChecklist
+	}
+	if cfg.ConfluenceSpaceKey == "" {
+		cfg.ConfluenceSpaceKey = fileCfg.ConfluenceSpaceKey
+	}
+	if cfg.DefaultProject == "" {
+		cfg.DefaultProject = fileCfg.DefaultProject
+	}
+	if cfg.Projects == nil {
+		cfg.Projects = fileCfg.Projects
+	}
 }
 
 // GetProject resolves which project to use.
@@ -180,21 +217,25 @@ func MigrateIfNeeded() {
 	fmt.Println("✓ Configuración migrada a ~/.config/gtt/config.yaml")
 }
 
-// loadFromFile reads and unmarshals the config file.
+// loadFromFile reads and unmarshals the config file. It returns (nil, nil) when
+// there is no file to read (no home directory, or the file does not exist yet).
 func loadFromFile() (*Config, error) {
 	path, err := ConfigPath()
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
 
 	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("no se pudo leer %s: %w", path, err)
 	}
 
 	cfg := &Config{}
 	if err := yaml.Unmarshal(data, cfg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s tiene un formato inválido: %w", path, err)
 	}
 	return cfg, nil
 }

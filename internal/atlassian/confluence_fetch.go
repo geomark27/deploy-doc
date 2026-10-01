@@ -133,34 +133,36 @@ func (c *Client) FindPagesByText(query, spaceKey string) ([]Page, error) {
 func BuildIssueTxt(issueKey string, page *PageContent) string {
 	var sb strings.Builder
 
-	bar80 := strings.Repeat("=", 80)
-	bar40 := strings.Repeat("-", 80)
+	frame := strings.Repeat("=", 80)
+	separator := strings.Repeat("-", 80)
 
-	sb.WriteString(bar80 + "\n")
-	sb.WriteString(issueKey + " - " + page.Title + "\n")
-	sb.WriteString(bar80 + "\n")
-	sb.WriteString("Fuente: Confluence - " + page.SpaceName + "\n")
-	sb.WriteString("URL: " + page.WebURL + "\n")
+	writeLine(&sb, frame)
+	writeLine(&sb, issueKey, " - ", page.Title)
+	writeLine(&sb, frame)
+	writeLine(&sb, "Fuente: Confluence - ", page.SpaceName)
+	writeLine(&sb, "URL: ", page.WebURL)
 	if page.CreatedDate != "" {
-		line := "Creado: " + page.CreatedDate
+		sb.WriteString("Creado: ")
+		sb.WriteString(page.CreatedDate)
 		if page.Version > 0 {
-			line += fmt.Sprintf(" | Versión: %d", page.Version)
+			fmt.Fprintf(&sb, " | Versión: %d", page.Version)
 		}
-		sb.WriteString(line + "\n")
+		sb.WriteByte('\n')
 	}
 	if page.UpdatedBy != "" {
-		sb.WriteString("Última edición: " + page.UpdatedBy + "\n")
+		writeLine(&sb, "Última edición: ", page.UpdatedBy)
 	}
-	sb.WriteString(bar40 + "\n")
+	writeLine(&sb, separator)
 
 	if page.StorageBody != "" {
-		sb.WriteString("\n")
+		sb.WriteByte('\n')
 		sb.WriteString(StorageToText(page.StorageBody))
 	}
 
-	sb.WriteString("\n" + bar80 + "\n")
-	sb.WriteString("FIN DEL DOCUMENTO\n")
-	sb.WriteString(bar80 + "\n")
+	sb.WriteByte('\n')
+	writeLine(&sb, frame)
+	writeLine(&sb, "FIN DEL DOCUMENTO")
+	writeLine(&sb, frame)
 
 	return sb.String()
 }

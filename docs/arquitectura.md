@@ -96,6 +96,15 @@ type ProjectConfig struct {
 
 **Prioridad de carga:** env vars (`ATLASSIAN_EMAIL`, `ATLASSIAN_TOKEN`, `ATLASSIAN_BASE_URL`) → archivo YAML.
 
+**Dos formas de cargar**, con la misma prioridad:
+
+| Función | Exige credenciales Atlassian | Para qué comandos |
+|---|---|---|
+| `config.Load()` | Sí: sin email, token o URL devuelve "configuración incompleta. Corre: gtt init" | Los que llaman a Jira o Confluence (`generate`, `qa`, `fetch`, `project`) |
+| `config.LoadLocal()` | No | Los que solo trabajan sobre repos locales y deben funcionar antes de `gtt init` |
+
+En ambas, un `config.yaml` inexistente no es error (aplican las env vars), pero uno que existe y no se puede leer o parsear sí: se reporta en vez de ignorarse.
+
 **Resolución de proyecto en `generate`:** flag `--project` / `-p` > `DefaultProject` > defaults hardcodeados (`operativo-api` / `echo-logistics` / `devtyt`).
 
 **Formato del archivo:** YAML via `gopkg.in/yaml.v3`. Ruta: `~/.config/deploy-doc/config.yaml`, permisos `0600`.
