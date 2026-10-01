@@ -122,7 +122,8 @@ the background at most once per 24h, suppressed when stdout is not a TTY or when
 Covered: `document.ExtractSection` and `Build`, `commitFileURL`, `BuildTitle`,
 `atlassian.quoteLiteral`, `parseDevTaskKey`, `BuildReviewMap`, `businessDaysAgo`,
 `updater.isNewer`, `git.GroupByDirectory`, `explainGitError`, `cmd.parseFlags`,
-`splitHashes`, `sanitizeFilename`.
+`splitHashes`, `sanitizeFilename`, `StorageToText`, `BuildIssueTxt`,
+`config.Load` / `LoadLocal` (isolated from the real config.yaml with a temp HOME).
 
 Anything touching the network is verified by hand against a real instance;
 `--dry-run` on `generate` and `qa` prints the ADF without publishing.
