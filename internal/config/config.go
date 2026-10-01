@@ -24,6 +24,42 @@ type ProjectConfig struct {
 	// stack-specific (a Laravel backend and a Node one need different
 	// commands), which is why the per-project layer exists.
 	DeployChecklist []string `yaml:"deploy_checklist,omitempty"`
+
+	// Backlog tunes `gtt backlog scan` per repo of the project. Where the
+	// classes and tests live is a convention of each stack, so it is config.
+	Backlog *BacklogConfig `yaml:"backlog,omitempty"`
+}
+
+// BacklogConfig holds the `gtt backlog scan` settings of a project's repos.
+type BacklogConfig struct {
+	Backend  *BacklogRepoConfig `yaml:"backend,omitempty"`
+	Frontend *BacklogRepoConfig `yaml:"frontend,omitempty"`
+}
+
+// BacklogRepoConfig overrides the scan defaults for one repo. Empty fields
+// keep the generic default of internal/backlog.
+type BacklogRepoConfig struct {
+	Since       string   `yaml:"since,omitempty"`
+	Extensions  []string `yaml:"extensions,omitempty"`
+	Exclude     []string `yaml:"exclude,omitempty"`
+	MaxLines    int      `yaml:"max_lines,omitempty"`
+	MinCommits  int      `yaml:"min_commits,omitempty"`
+	FixKeywords []string `yaml:"fix_keywords,omitempty"`
+	ClassGlobs  []string `yaml:"class_globs,omitempty"`
+	TestsDir    string   `yaml:"tests_dir,omitempty"`
+	TestGlobs   []string `yaml:"test_globs,omitempty"`
+}
+
+// BacklogFor returns the backlog settings of the given repo ("backend" or
+// "frontend"), or nil when the project does not configure it.
+func (p *ProjectConfig) BacklogFor(repo string) *BacklogRepoConfig {
+	if p == nil || p.Backlog == nil {
+		return nil
+	}
+	if repo == "frontend" {
+		return p.Backlog.Frontend
+	}
+	return p.Backlog.Backend
 }
 
 // QAReportConfig holds the names printed in the header of the QA consolidated

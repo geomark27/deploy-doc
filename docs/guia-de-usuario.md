@@ -298,6 +298,119 @@ Si el proyecto eliminado era el por defecto, avisa y limpia la configuración de
 
 ---
 
+### backlog scan
+
+Detecta deuda técnica en un repo local y la propone como tareas con severidad y puntos sugeridos. **No necesita credenciales de Atlassian** ni `gtt init`, y **no usa la red** salvo con `--deps`. Solo lee el historial de git y los archivos versionados; no modifica nada.
+
+```bash
+gtt backlog scan [-p <PROYECTO>] [-r backend|frontend] [--path <RUTA>] [--since 90d] [-l 10] [-o [RUTA]] [--json] [--deps]
+```
+
+**Flags disponibles:**
+
+| Flag corto | Flag largo | Descripción |
+|---|---|---|
+| `-p` | `--project` | Proyecto a usar. Si se omite, usa el `default_project` |
+| `-r` | `--repo` | Solo `backend` o solo `frontend`. Sin este flag se analizan **todos** los repos del proyecto que tengan ruta configurada. Si el proyecto no tiene la ruta pedida, es un error |
+| — | `--path` | Repo a analizar. Tiene prioridad sobre el proyecto; sin proyecto ni `--path` usa la carpeta actual |
+| — | `--since` | Período del historial: `90d`, `12w`, `3m` o cualquier formato de `git log --since`. Por defecto `90d` |
+| `-l` | `--limit` | Cuántos hallazgos mostrar. Por defecto 10; `0` muestra todos |
+| — | `--json` | Imprime los reportes en JSON en vez de la tabla: siempre una lista, con un reporte por repo. Sin mensajes de progreso |
+| `-o` | `--output` | Guarda el reporte **completo** en JSON (UTF-8). Sin ruta va a `~/.config/gtt/backlog/<proyecto>-<repo>.json` (en Windows `%USERPROFILE%\.config\gtt\backlog\`). Un archivo por repo; con varios repos, `-o` recibe una carpeta. `--limit` solo recorta lo que se muestra |
+| — | `--deps` | Incluye `composer audit`, que consulta el API de advisories de Packagist |
+
+**Detectores:**
+
+| Tipo | Qué detecta | Severidad |
+|---|---|---|
+| `hotspot` | Archivos con muchos commits en el período (por defecto 10 o más). Lo que más cambia es donde más defectos se concentran | Alta si además supera el umbral de líneas; media si no |
+| `sin-test` | Clases cuyo nombre no aparece en ningún archivo de la carpeta de tests. Requiere `class_globs` | Baja; alta si además es hotspot |
+| `marcador` | `TODO`, `FIXME`, `HACK` en mayúsculas y como palabra completa. `XXX` no cuenta: se usa más como relleno en datos que como marcador | Media con FIXME/HACK; baja con solo TODO |
+| `archivo-grande` | Archivos de código sobre el umbral (por defecto 800 líneas) que no son hotspot | Baja; media desde 3 veces el umbral |
+| `dependencia` | Paquetes de `composer.lock` con vulnerabilidades reportadas (solo con `--deps`) | Alta |
+
+Los títulos proponen **un incremento**, no la reescritura completa ("Extraer una responsabilidad de X y cubrirla con tests"): una clase de miles de líneas no es una tarea, pero puede alimentar varias. Los puntos son una sugerencia que valida el equipo.
+
+Cada hallazgo tiene un `id` de 10 caracteres que es **estable entre ejecuciones** (mismo tipo y mismo archivo, mismo id), para poder referirlo después.
+
+Si un detector no puede correr (git falla, falta `class_globs`, composer no está instalado), se muestra como **omitido** con el motivo: un reporte corto nunca se confunde con un repo limpio.
+
+**Configuración por proyecto** (opcional, en `~/.config/gtt/config.yaml`). Todos los campos tienen un valor por defecto genérico; `class_globs` es el único necesario para activar `sin-test`:
+
+```yaml
+projects:
+  mi-proyecto:
+    backend_path: C:\repos\mi-api
+    frontend_path: C:\repos\mi-web
+    backlog:
+      backend:
+        class_globs:                 # Archivos que deberían tener test (soporta **)
+          - "app/Http/**/BusinessLogic/**/*.php"
+          - "app/Http/**/Services/**/*.php"
+        tests_dir: tests             # Por defecto: tests
+        since: 90d                   # Por defecto: 90d
+        min_commits: 10              # Commits en el período para ser hotspot. Por defecto: 10
+        max_lines: 800               # Umbral de archivo grande. Por defecto: 800
+        exclude:                     # Reemplaza la lista por defecto
+          - "vendor/**"
+          - "**/seeders/**"
+        extensions: [".php"]         # Reemplaza la lista por defecto
+        fix_keywords: ["fix", "corrige"]  # Solo agregan evidencia ("3 de 15 commits parecen correcciones")
+      frontend:
+        class_globs:
+          - "src/app/**/*.service.ts"
+        test_globs:                  # Tests junto al código: reemplaza a tests_dir
+          - "**/*.spec.ts"
+```
+
+En `sin-test` se deduce el nombre de la clase a partir del archivo y se busca entre los identificadores de los tests:
+
+| Archivo | Clase buscada |
+|---|---|
+| `PagoService.php` (PSR-4, Java, C#) | `PagoService` |
+| `pago-detalle.service.ts` (Angular) | `PagoDetalleService` |
+| `pago_service.py` (Python) | `PagoService` |
+
+Si un archivo no sigue ninguna de esas convenciones, puede salir como falso positivo: ajusta `class_globs` para dejarlo fuera.
+
+Los tests nunca se analizan como código. Son tests los archivos bajo `tests_dir` y, por nombre, los que siguen las convenciones comunes: `*.spec.*`, `*.test.*`, `*_test.*`, `test_*.py`, `*Test.*` y `*Tests.*`. Con `test_globs` se reemplazan ambos criterios.
+
+Por defecto se excluyen `vendor/`, `node_modules/`, `dist/`, `build/`, `storage/`, `public/`, migraciones, seeders, fixtures, `testdata/`, `*.min.js` y lockfiles.
+
+**Guardar el reporte:** usa `-o` en lugar de redirigir con `>`. En Windows PowerShell 5.1, `>` guarda en UTF-16 y el JSON queda ilegible para otras herramientas; `-o` siempre escribe UTF-8. El reporte incluye rutas y mensajes de commits internos: guárdalo en tu equipo (por defecto, junto al `config.yaml`), no en una carpeta sincronizada con la nube.
+
+**Rutas:** en pantalla se muestran con el separador del sistema (`\` en Windows, `/` en Linux y macOS). En el JSON van siempre con `/`, igual que git: así el `id` de un hallazgo es el mismo en la máquina de cada compañero, sin importar su sistema operativo.
+
+**Ejemplos en Windows (PowerShell):**
+
+```powershell
+# Proyecto por defecto: backend y frontend, últimos 90 días, top 10 de cada uno
+gtt backlog scan
+
+# Frontend del proyecto echo, último mes
+gtt backlog scan -p echo -r frontend --since 30d
+
+# Cualquier repo, guardando el reporte completo en %USERPROFILE%\.config\gtt\backlog\
+gtt backlog scan --path C:\repos\mi-api -o
+
+# Guardar en una ruta concreta (con espacios, entre comillas)
+gtt backlog scan -o "C:\Mis reportes\backlog.json"
+
+# Incluyendo vulnerabilidades de dependencias (usa la red)
+gtt backlog scan --deps
+```
+
+**Ejemplos en Linux y macOS:**
+
+```bash
+gtt backlog scan
+gtt backlog scan --path ~/repos/mi-api -o
+gtt backlog scan -o ~/reportes/backlog.json
+gtt backlog scan -r backend --json | jq '.[0].hallazgos[0]'
+```
+
+---
+
 ### update
 
 Verifica si hay una nueva versión disponible y actualiza el CLI automáticamente.

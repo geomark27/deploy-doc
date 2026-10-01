@@ -22,12 +22,19 @@ deploy-doc/
 │   ├── init.go                    # Comando: gtt init (interactivo)
 │   ├── generate.go                # Comando: gtt g|gen|generate (flujo principal)
 │   ├── project.go                 # Comando: gtt project (list|ls/add/default/remove)
+│   ├── backlog.go                 # Comando: gtt backlog scan (deuda técnica, sin credenciales)
 │   └── update.go                  # Comando: gtt update (auto-actualización)
 ├── internal/
 │   ├── build/
 │   │   └── version.go             # var Version = "dev" (sobreescrita por ldflags)
 │   ├── config/
 │   │   └── config.go              # Config + ProjectConfig structs, Load/Save con yaml.v3
+│   ├── backlog/
+│   │   ├── finding.go             # Finding, Kind, Severity, Rank, IDs estables
+│   │   ├── options.go             # Options + defaults genéricos, globs con **
+│   │   ├── detectors.go           # Lógica pura de cada detector (parseo y reglas)
+│   │   ├── repo.go                # git de solo lectura (LookPath, ls-files, log, grep)
+│   │   └── scan.go                # Scan: orquesta los detectores y arma el Report
 │   ├── git/
 │   │   └── git.go                 # GetChangedFiles, GetChangedFilesMulti, GroupByDirectory
 │   ├── atlassian/
@@ -72,6 +79,36 @@ config.Load()          env vars > ~/.config/deploy-doc/config.yaml
 ```
 
 ---
+
+## Backlog técnico (`gtt backlog scan`)
+
+Detecta deuda técnica en un repo local, sin red ni credenciales (usa `config.LoadLocal()`).
+
+```
+cmd/backlog.go     flags → config del proyecto (backlog.backend|frontend) → backlog.Options
+    │
+    ▼
+backlog.Scan(dir)
+    ├── git ls-files            archivos versionados (lo ignorado nunca entra)
+    ├── measureSources          líneas por archivo de código
+    ├── git log --since         churn por archivo   → hotspot (≥ min_commits; alta si además es grande)
+    ├── git grep TODO|FIXME…    marcadores          → marcador
+    ├── largeFileFindings       grandes que NO son hotspot → archivo-grande
+    ├── class_globs vs tests    identificadores de los tests → sin-test (alta si es hotspot)
+    └── composer audit          solo con --deps (usa la red) → dependencia
+    │
+    ▼
+Rank → Report{version, total, hallazgos, omitidos}  → tabla o --json
+```
+
+**Decisiones:**
+
+- **Hotspot = frecuencia de cambio, no palabras clave.** Los equipos nombran los arreglos por el síntoma ("no queda persistente"), así que `fix_keywords` solo aporta evidencia. Medido en un repo real: 25 de 234 commits usaban palabras de corrección.
+- **Tareas de un incremento.** "Extraer una responsabilidad de X" y no "refactorizar X": un archivo de miles de líneas no es una tarea, pero alimenta varias. Por eso los puntos no crecen con el tamaño del archivo.
+- **Un detector que falla no aborta el scan**: queda en `omitidos` con su motivo. Solo es fatal no poder abrir el repo.
+- **IDs estables** (`sha1(tipo + archivo)`): permiten que una etapa posterior recuerde qué hallazgos ya se mostraron, tomaron o descartaron.
+- **Sin datos de la organización en el binario (P-001, P-008):** los defaults son genéricos; dónde viven las clases y los tests de cada stack va en `config.yaml`.
+- **`Report.Version`** se incrementa si cambia la forma del JSON.
 
 ## Diseño de configuración
 
