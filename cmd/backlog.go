@@ -28,7 +28,7 @@ var backlogScanShortFlags = map[string]string{
 const defaultBacklogLimit = 10
 
 func runBacklog(args []string) error {
-	if len(args) == 0 {
+	if len(args) == 0 || isHelpArg(args[0]) {
 		printBacklogUsage()
 		return nil
 	}
@@ -345,31 +345,64 @@ func printBacklogReport(rep *backlog.Report) {
 }
 
 func printBacklogUsage() {
-	fmt.Printf(clCyan + clBold + "gtt backlog" + clReset + " — Detecta deuda técnica en un repo local\n\n")
-	fmt.Print(clBold + "Uso:\n" + clReset)
+	h := func(s string) { fmt.Print(clBold + s + clReset + "\n") }
+
+	fmt.Printf(clCyan + clBold + "gtt backlog scan" + clReset + " — Detecta deuda técnica y la propone como tareas\n\n")
+	fmt.Print("  Revisa el historial de git y el código de tus repos y lista lo que conviene\n")
+	fmt.Print("  atacar: archivos que cambian demasiado, clases sin tests, TODO/FIXME pendientes\n")
+	fmt.Print("  y archivos enormes. Cada hallazgo trae prioridad y puntos sugeridos.\n")
+	fmt.Print("  Solo lee: no modifica nada, no usa internet (salvo --deps) y no necesita gtt init.\n\n")
+
+	h("Uso:")
 	fmt.Print("  gtt backlog scan [flags]\n\n")
-	fmt.Print(clBold + "Flags de scan:\n" + clReset)
-	fmt.Print("  -p, --project   Proyecto a usar (del config.yaml)\n")
-	fmt.Print("  -r, --repo      Solo backend o solo frontend (por defecto: todos los repos del proyecto)\n")
-	fmt.Print("      --path      Repo a analizar; tiene prioridad sobre el proyecto\n")
-	fmt.Print("      --since     Período del historial: 90d, 12w, 3m o formato git (por defecto 90d)\n")
-	fmt.Print("  -l, --limit     Hallazgos a mostrar (por defecto 10, 0 = todos)\n")
-	fmt.Print("      --json      Imprime los reportes en JSON (una lista, uno por repo) en vez de la tabla\n")
+
+	h("Qué analiza (se puede ejecutar desde cualquier carpeta):")
+	fmt.Print("  1. El proyecto de -p, o el default_project de tu config.yaml\n")
+	fmt.Print("  2. Todos sus repos con ruta: backend_path y frontend_path (con -r, solo uno)\n")
+	fmt.Print("  3. Con --path, esa carpeta en lugar del proyecto\n")
+	fmt.Print("  4. Sin proyecto ni --path, la carpeta actual\n\n")
+
+	h("Flags:")
+	fmt.Print("  -p, --project   Proyecto del config.yaml                     (por defecto: default_project)\n")
+	fmt.Print("  -r, --repo      backend o frontend: analiza solo ese repo    (por defecto: todos)\n")
+	fmt.Print("      --path      Carpeta a analizar, aunque no sea un proyecto\n")
+	fmt.Print("      --since     Historial a mirar: 30d, 12w, 3m o una fecha  (por defecto: 90d)\n")
+	fmt.Print("  -l, --limit     Hallazgos a mostrar por repo; 0 = todos      (por defecto: 10)\n")
 	fmt.Print("  -o, --output    Guarda el reporte completo en JSON, un archivo por repo\n")
-	fmt.Print("                  Sin ruta: " + defaultBacklogDirHint() + ". Con varios repos, la ruta es una carpeta\n")
-	fmt.Print("      --deps      Incluye composer audit (consulta Packagist; sin este flag el scan no usa red)\n\n")
-	fmt.Print(clBold + "Detectores:\n" + clReset)
-	fmt.Print("  hotspot         Archivos que más cambian en el período (alta si además son grandes)\n")
-	fmt.Print("  marcador        TODO / FIXME / HACK pendientes\n")
-	fmt.Print("  archivo-grande  Archivos de código sobre el umbral de líneas\n")
-	fmt.Print("  sin-test        Clases sin ninguna mención en los tests (requiere class_globs)\n")
-	fmt.Print("  dependencia     Paquetes con vulnerabilidades reportadas (con --deps)\n\n")
-	fmt.Print(clBold + "Ejemplos:\n" + clReset)
-	fmt.Print("  gtt backlog scan                         # backend y frontend del proyecto por defecto\n")
-	fmt.Print("  gtt backlog scan -p echo -r frontend --since 30d\n")
-	fmt.Print("  gtt backlog scan --path " + exampleRepoPath() + " -o\n")
-	fmt.Print("  gtt backlog scan -o " + exampleReportPath() + "\n")
+	fmt.Print("                  Sin ruta: " + defaultBacklogDirHint() + "<proyecto>-<repo>.json\n")
+	fmt.Print("      --json      Imprime JSON en vez de la tabla (para otras herramientas)\n")
+	fmt.Print("      --deps      Revisa paquetes vulnerables con composer audit (usa internet)\n")
+	fmt.Print("  -h, --help      Muestra esta ayuda\n\n")
+
+	h("Qué detecta:")
+	fmt.Print("  hotspot         Archivos con 10+ commits en el período. Alta prioridad si además son grandes\n")
+	fmt.Print("  sin-test        Clases que no aparecen en ningún test (requiere class_globs, ver abajo)\n")
+	fmt.Print("  marcador        TODO / FIXME / HACK pendientes en el código\n")
+	fmt.Print("  archivo-grande  Archivos de más de 800 líneas que casi no cambian (prioridad baja)\n")
+	fmt.Print("  dependencia     Paquetes con vulnerabilidades reportadas (solo con --deps)\n\n")
+
+	h("Configuración (opcional):")
+	fmt.Print("  Sin configurar nada funcionan todos los detectores menos sin-test. Para activarlo,\n")
+	fmt.Print("  agrega dentro de tu proyecto en " + configPathHint() + ":\n\n")
+	fmt.Print(clCyan + "    backlog:\n")
+	fmt.Print("      backend:\n")
+	fmt.Print("        class_globs: [\"app/**/Services/**/*.php\"]   # archivos que deberían tener test\n")
+	fmt.Print("      frontend:\n")
+	fmt.Print("        class_globs: [\"src/app/**/*.service.ts\"]" + clReset + "\n\n")
+	fmt.Print("  También acepta: since, min_commits, max_lines, exclude, extensions, tests_dir y\n")
+	fmt.Print("  test_globs. Detalle en la guía: " + backlogGuideURL + "\n\n")
+
+	h("Ejemplos:")
+	fmt.Print("  gtt backlog scan                           # backend y frontend del proyecto por defecto\n")
+	fmt.Print("  gtt backlog scan -o                        # lo mismo y guarda el reporte completo\n")
+	fmt.Print("  gtt backlog scan -r frontend --since 30d   # solo el frontend, último mes\n")
+	fmt.Print("  gtt backlog scan -l 0                      # todos los hallazgos, no solo el top 10\n")
+	fmt.Print("  gtt backlog scan --path " + exampleRepoPath() + "    # un repo que no está en tus proyectos\n")
+	fmt.Print("  gtt backlog scan -r backend -o " + exampleReportPath() + "   # un solo repo, a un archivo\n")
 }
+
+// backlogGuideURL points to the full `backlog scan` section of the user guide.
+const backlogGuideURL = "https://github.com/geomark27/deploy-doc/blob/main/docs/guia-de-usuario.md#backlog-scan"
 
 // defaultBacklogDirHint shows where -o saves a report without a path, written
 // the way the user's system writes paths.

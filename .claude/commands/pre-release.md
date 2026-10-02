@@ -33,10 +33,18 @@ Lee el `Makefile` y verifica que el target `release` genere un archivo `checksum
 - Si no existe, reportarlo como **bloqueante** (viola P-006).
 - Muestra el comando exacto que debería agregarse al Makefile si falta.
 
-### Paso 5 — Verificar versión
-- Lee `internal/build/version.go` y muestra la versión actual.
-- Confirma que el tag de git más reciente coincide: `git describe --tags --abbrev=0`.
-- Si hay diferencia, advierte al usuario.
+### Paso 5 — Verificar versiones y bitácora
+Ejecuta la skill `version-check`:
+```bash
+bash .claude/skills/version-check/check.sh
+```
+- Cualquier **✗** es NO-GO: rama distinta de `main`, `HEAD` sin el último tag,
+  o falta la entrada de bitácora de la próxima versión (o su "Versión anterior"
+  no es la base real).
+- Las **⚠** se muestran al usuario con su acción (por ejemplo, cambios sin
+  commit que `git add -A` metería en el commit de release).
+- No leas `internal/build/version.go`: siempre dice `"dev"`, porque la versión
+  real se inyecta al compilar con `-ldflags`.
 
 ### Paso 6 — Estado del repositorio
 ```bash

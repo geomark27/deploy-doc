@@ -54,6 +54,19 @@ func TestSaveBacklogReportDefaultsNextToConfig(t *testing.T) {
 	}
 }
 
+func TestWantsHelp(t *testing.T) {
+	for _, args := range [][]string{{"-h"}, {"--help"}, {"-p", "echo", "--help"}} {
+		if !wantsHelp(args) {
+			t.Errorf("%v debe pedir ayuda", args)
+		}
+	}
+	for _, args := range [][]string{nil, {"-p", "echo"}, {"--path", "help"}} {
+		if wantsHelp(args) {
+			t.Errorf("%v no pide ayuda", args)
+		}
+	}
+}
+
 func TestNormalizeSince(t *testing.T) {
 	for in, want := range map[string]string{
 		"90d":         "90 days ago",

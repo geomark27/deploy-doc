@@ -56,7 +56,14 @@ func Execute() error {
 	}
 
 	cmdName := os.Args[1]
-	if cmdName == "help" || cmdName == "--help" || cmdName == "-h" {
+	if isHelpArg(cmdName) {
+		// gtt help <comando> shows that command's own help when it has one.
+		if len(os.Args) > 2 {
+			if fn, ok := commandHelp[os.Args[2]]; ok {
+				fn()
+				return nil
+			}
+		}
 		printUsage()
 		return nil
 	}
@@ -72,111 +79,15 @@ func Execute() error {
 		return fmt.Errorf("comando inválido")
 	}
 
+	// -h / --help is answered here, before the command runs: otherwise a
+	// command that ignores flags (init, update) would do its job when the
+	// user only asked how to use it.
+	if help, ok := commandHelp[cmdName]; ok && wantsHelp(os.Args[2:]) {
+		help()
+		return nil
+	}
+
 	return fn(os.Args[2:])
-}
-
-func printUsage() {
-	fmt.Printf(clCyan+clBold+"gtt %s"+clReset+" — Generador de documentos de despliegue\n\n", build.Version)
-
-	// ── Uso ──────────────────────────────────────────────────────────────────
-	fmt.Print(clBold + "Uso:\n" + clReset)
-	fmt.Print("  gtt <comando> [flags]\n\n")
-
-	// ── Comandos ─────────────────────────────────────────────────────────────
-	fmt.Print(clBold + "Comandos:\n" + clReset)
-	fmt.Print("  init              Configura credenciales y preferencias (wizard interactivo)\n")
-	fmt.Print("  g, gen, generate  Genera un documento de despliegue en Confluence\n")
-	fmt.Print("  qa                Genera consolidado de pruebas QA en Confluence\n")
-	fmt.Print("  f, fetch          Exporta una página de Confluence a .txt por issue key\n")
-	fmt.Print("  project           Gestiona proyectos: list, add, default, remove\n")
-	fmt.Print("  backlog scan      Detecta deuda técnica en un repo local (sin credenciales)\n")
-	fmt.Print("  update            Actualiza gtt a la última versión\n")
-	fmt.Print("  version           Muestra la versión instalada\n\n")
-
-	// ── gtt init ─────────────────────────────────────────────────────────────
-	fmt.Print(clBold + "gtt init — qué configura:\n" + clReset)
-	fmt.Print("  Atlassian email         Tu email de la cuenta Atlassian\n")
-	fmt.Print("  Atlassian API token     Token generado en id.atlassian.com\n")
-	fmt.Print("  Atlassian base URL      URL de tu instancia (ej: https://empresa.atlassian.net)\n")
-	fmt.Print("  Confluence space key    Space por defecto (ej: PA). Opcional — puedes\n")
-	fmt.Print("                          cambiarlo por comando con --space\n")
-	fmt.Print("  Al configurar un proyecto también pide:\n")
-	fmt.Print("    Rutas locales backend/frontend\n")
-	fmt.Print("    Nombres de repositorios\n")
-	fmt.Print("    VCS host  (ej: https://bitbucket.org)\n")
-	fmt.Print("    VCS org   (ej: mi-organizacion)\n\n")
-	fmt.Print("  Todo se guarda en " + clCyan + "~/.config/gtt/config.yaml" + clReset + "\n")
-	fmt.Print("  Las variables de entorno tienen prioridad sobre el archivo:\n")
-	fmt.Print("    ATLASSIAN_EMAIL, ATLASSIAN_TOKEN, ATLASSIAN_BASE_URL, CONFLUENCE_SPACE_KEY\n\n")
-
-	// ── generate ─────────────────────────────────────────────────────────────
-	fmt.Print(clBold + "Flags de generate (gtt g):\n" + clReset)
-	fmt.Print("  -i, --issue            Clave del issue en Jira              " + clYellow + "(requerido)" + clReset + "\n")
-	fmt.Print("  -b, --commit-backend   Hash(es) de commits backend          (separar con coma)\n")
-	fmt.Print("  -f, --commit-frontend  Hash(es) de commits frontend         (separar con coma)\n")
-	fmt.Print("  -p, --project          Proyecto a usar (del config.yaml)\n")
-	fmt.Print("  -s, --space            " + clCyan + "Override" + clReset + " del Confluence space key para esta ejecución\n")
-	fmt.Print("      --vcs-host         " + clCyan + "Override" + clReset + " del host VCS para esta ejecución\n")
-	fmt.Print("      --vcs-org          " + clCyan + "Override" + clReset + " de la org/workspace VCS para esta ejecución\n\n")
-	fmt.Print("  Prioridad de " + clBold + "--space" + clReset + ":\n")
-	fmt.Print("    1. Flag --space en el comando                (máxima prioridad)\n")
-	fmt.Print("    2. confluence_space_key del proyecto (-p)\n")
-	fmt.Print("    3. confluence_space_key global en config.yaml\n\n")
-	fmt.Print("  Prioridad de " + clBold + "--vcs-host / --vcs-org" + clReset + ":\n")
-	fmt.Print("    1. Flags --vcs-host / --vcs-org en el comando\n")
-	fmt.Print("    2. vcs_host / vcs_org del proyecto en config.yaml\n\n")
-	fmt.Print("  Sección " + clBold + "\"A considerar\"" + clReset + ":\n")
-	fmt.Print("    Al " + clBold + "crear" + clReset + "   — pasos de deploy_checklist (proyecto > global > default genérico)\n")
-	fmt.Print("    Al " + clBold + "actualizar" + clReset + " — se preserva tal como quedó editada en Confluence\n\n")
-
-	// ── qa ───────────────────────────────────────────────────────────────────
-	fmt.Print(clBold + "Flags de qa:\n" + clReset)
-	fmt.Print("  -s, --sprint           Número del sprint                    (opcional)\n")
-	fmt.Print("  -m, --module           Módulo (ej: DAI, Aforo)              (solo Sprint)\n")
-	fmt.Print("      --space            " + clCyan + "Override" + clReset + " del Confluence space key para esta ejecución\n\n")
-	fmt.Print("  Modos de operación:\n")
-	fmt.Print("    Sprint  — con -s y -m: busca tareas del módulo en el sprint indicado\n")
-	fmt.Print("    Kanban  — sin -s ni -m: busca " + clBold + "todas" + clReset + " las tareas de los últimos 10 días hábiles\n\n")
-	fmt.Print("  Prioridad de " + clBold + "--space" + clReset + " (misma lógica que generate):\n")
-	fmt.Print("    1. Flag --space en el comando\n")
-	fmt.Print("    2. confluence_space_key global en config.yaml\n\n")
-	fmt.Print("  Encabezado del reporte — se edita en " + clCyan + "~/.config/gtt/config.yaml" + clReset + ":\n")
-	fmt.Print("    qa_report:\n")
-	fmt.Print("      lider_tecnico: \"...\"\n")
-	fmt.Print("      pmo: \"...\"\n")
-	fmt.Print("      qa: \"...\"\n")
-	fmt.Print("    Las claves ausentes se publican como " + clBold + "—" + clReset + "\n\n")
-
-	// ── fetch ────────────────────────────────────────────────────────────────
-	fmt.Print(clBold + "Flags de fetch (gtt f):\n" + clReset)
-	fmt.Print("  -i, --issue    Clave del issue en Jira              " + clYellow + "(requerido)" + clReset + "\n")
-	fmt.Print("  -o, --output   Nombre del archivo de salida         (por defecto: APP-1981_Titulo.txt)\n")
-	fmt.Print("  -s, --space    " + clCyan + "Override" + clReset + " del Confluence space key para esta búsqueda\n\n")
-
-	// ── Ejemplos ─────────────────────────────────────────────────────────────
-	fmt.Print(clBold + "Ejemplos:\n" + clReset)
-	fmt.Print("\n  " + clBold + "# Uso estándar (space key viene del config.yaml):" + clReset + "\n")
-	fmt.Print("  gtt g -i APP-1999 -b 27cefd86 -f 5bd0cea0\n")
-	fmt.Print("  gtt qa -s 17 -m DAI\n")
-	fmt.Print("  gtt qa                                  # modo Kanban (todas las tareas, 10 días hábiles)\n")
-	fmt.Print("\n  " + clBold + "# Override puntual de space key (sin editar config.yaml):" + clReset + "\n")
-	fmt.Print("  gtt g -i ADN-567 -b abc1234 --space ADN\n")
-	fmt.Print("  gtt qa -s 42 -m Aforo --space ADN\n")
-	fmt.Print("\n  " + clBold + "# Override puntual de VCS (ej: repo en otro workspace):" + clReset + "\n")
-	fmt.Print("  gtt g -i APP-1999 -b abc1234 --vcs-org mi-fork --vcs-host https://github.com\n")
-	fmt.Print("\n  " + clBold + "# Gestión de proyectos:" + clReset + "\n")
-	fmt.Print("  gtt project list\n")
-	fmt.Print("  gtt g -i APP-1999 -b abc1234 -p echo\n")
-	fmt.Print("\n  " + clBold + "# Exportar página de Confluence a .txt:" + clReset + "\n")
-	fmt.Print("  gtt fetch -i APP-1981\n")
-	fmt.Print("  gtt f -i APP-1981 -o mi_tarea.txt\n")
-	fmt.Print("  gtt f -i APP-1981 --space PA\n")
-	fmt.Print("\n  " + clBold + "# Backlog técnico (más flags: gtt backlog):" + clReset + "\n")
-	fmt.Print("  gtt backlog scan\n")
-	fmt.Print("  gtt backlog scan -p echo -r frontend --since 30d --json\n")
-	fmt.Print("\n  " + clBold + "# Otros:" + clReset + "\n")
-	fmt.Print("  gtt init\n")
-	fmt.Print("  gtt update\n\n")
 }
 
 // parseFlagsWithShorts normalizes short flags to their long form then parses all flags.
