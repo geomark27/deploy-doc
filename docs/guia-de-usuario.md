@@ -381,6 +381,8 @@ Por defecto se excluyen `vendor/`, `node_modules/`, `dist/`, `build/`, `storage/
 
 **Rutas:** en pantalla se muestran con el separador del sistema (`\` en Windows, `/` en Linux y macOS). En el JSON van siempre con `/`, igual que git: así el `id` de un hallazgo es el mismo en la máquina de cada compañero, sin importar su sistema operativo.
 
+**Ayuda en la terminal:** `gtt help backlog` o `gtt backlog scan -h` muestran flags, detectores, configuración y ejemplos.
+
 **Ejemplos en Windows (PowerShell):**
 
 ```powershell
@@ -393,8 +395,10 @@ gtt backlog scan -p echo -r frontend --since 30d
 # Cualquier repo, guardando el reporte completo en %USERPROFILE%\.config\gtt\backlog\
 gtt backlog scan --path C:\repos\mi-api -o
 
-# Guardar en una ruta concreta (con espacios, entre comillas)
-gtt backlog scan -o "C:\Mis reportes\backlog.json"
+# Guardar en una ruta concreta (con espacios, entre comillas).
+# Con un solo repo -o recibe un archivo; con varios, una carpeta
+gtt backlog scan -r backend -o "C:\Mis reportes\backlog.json"
+gtt backlog scan -o "C:\Mis reportes"
 
 # Incluyendo vulnerabilidades de dependencias (usa la red)
 gtt backlog scan --deps
@@ -405,7 +409,7 @@ gtt backlog scan --deps
 ```bash
 gtt backlog scan
 gtt backlog scan --path ~/repos/mi-api -o
-gtt backlog scan -o ~/reportes/backlog.json
+gtt backlog scan -r backend -o ~/reportes/backlog.json
 gtt backlog scan -r backend --json | jq '.[0].hallazgos[0]'
 ```
 
@@ -440,13 +444,24 @@ gtt version
 
 ### help
 
-Muestra la ayuda general con los comandos disponibles.
+La ayuda tiene dos niveles:
+
+| Comando | Qué muestra |
+|---|---|
+| `gtt help` (o `gtt --help`, `gtt -h`, `gtt` solo) | Índice: todos los comandos agrupados por uso, una línea cada uno, y ejemplos rápidos |
+| `gtt help <comando>` | Ayuda detallada del comando: flags con sus valores por defecto, prioridades, configuración y ejemplos |
+| `gtt <comando> -h` (o `--help`) | Lo mismo que `gtt help <comando>` |
+
+Funciona con los alias y con los subcomandos:
 
 ```bash
-gtt help
-gtt --help
-gtt -h
+gtt help g              # = gtt help generate
+gtt f -h                # ayuda de fetch
+gtt project add -h      # ayuda de project
+gtt backlog scan -h     # ayuda de backlog
 ```
+
+`-h` nunca ejecuta el comando: `gtt update -h` muestra la ayuda sin actualizar y `gtt init -h` no abre el asistente.
 
 ---
 

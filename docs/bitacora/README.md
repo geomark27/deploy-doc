@@ -15,6 +15,8 @@ Cada entrada sigue el formato: **Solicitud → Motivación → Diseño técnico 
 | [v1.1.5](./v1.1.5.md) | 2026-05-04 | **Security Patch** | Remediación DevSecOps: backdoor GTT_DEV, URLs/IDs hardcodeados, verificación de integridad en update |
 | [v1.2.0](./v1.2.0.md) | 2026-05-04 | Minor | Eliminación total del legado deploy-doc: binarios, paths, instalador y migración automática de config |
 | [v1.3.0](./v1.3.0.md) | 2026-09-21 | Minor | Preservación de "A Considerar" (issue #4), fix PATH Windows, `space-id` en v2, errores no silenciados en QA, escapado JQL/CQL, P-008 y primeros tests |
+| [v1.4.0](./v1.4.0.md) | 2026-10-01 | Minor | `gtt backlog scan` (deuda técnica), `config.LoadLocal`, 7 bugs del conversor de `fetch`. **Publicado también como v1.3.1 y v1.4.1** (mismo contenido; referencia: v1.4.1) |
+| [v1.4.2](./v1.4.2.md) | 2026-10-02 | Patch | Ayuda en dos niveles (`gtt help <comando>`, `-h`), `-h` que nunca ejecuta, skill `version-check` |
 
 ---
 

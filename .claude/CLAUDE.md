@@ -137,6 +137,25 @@ installer skips (`/go-build/` in the path).
 Anything touching the network is verified by hand against a real instance;
 `--dry-run` on `generate` and `qa` prints the ADF without publishing.
 
+## Versions and releases
+
+**At the end of every task that changes files in this repo, run the
+`version-check` skill** (`bash .claude/skills/version-check/check.sh`) and
+include its summary in your report: current published version, next version
+and target, blockers and warnings. It is read-only.
+
+- `make release*` does `git add -A`, commit, tag and push **on the current
+  branch**: release only from an up-to-date `main`, with a clean tree. On
+  2026-10-01 a release from a feature branch produced three tags for one change
+  (v1.3.1, v1.4.0, v1.4.1).
+- `internal/build/version.go` always says `"dev"`; the real version comes from
+  the tag via `-ldflags`. Never read it to know the current version.
+- **Never add new content to the bitácora entry of a published version.** Only
+  clarifying notes. New work goes into the entry of the next version, which
+  must state the real base in `**Versión anterior:**` and be listed in
+  `docs/bitacora/README.md`.
+- Never delete or move a published tag: document it instead.
+
 ## Docs
 
 - `docs/arquitectura.md` — architecture notes
