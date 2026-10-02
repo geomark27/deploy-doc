@@ -48,6 +48,7 @@ type BacklogRepoConfig struct {
 	ClassGlobs  []string `yaml:"class_globs,omitempty"`
 	TestsDir    string   `yaml:"tests_dir,omitempty"`
 	TestGlobs   []string `yaml:"test_globs,omitempty"`
+	Modules     []string `yaml:"modules,omitempty"`
 }
 
 // BacklogFor returns the backlog settings of the given repo ("backend" or

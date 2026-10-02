@@ -12,11 +12,31 @@ import (
 )
 
 func TestBacklogReportName(t *testing.T) {
-	if got := backlogReportName("echo", "/repos/api", "frontend"); got != "echo-frontend.json" {
+	if got := backlogReportName("echo", "/repos/api", "frontend", nil); got != "echo-frontend.json" {
 		t.Errorf("con proyecto: %q", got)
 	}
-	if got := backlogReportName("", filepath.Join("repos", "mi-api"), "backend"); got != "mi-api-backend.json" {
+	if got := backlogReportName("", filepath.Join("repos", "mi-api"), "backend", nil); got != "mi-api-backend.json" {
 		t.Errorf("sin proyecto usa el nombre de la carpeta: %q", got)
+	}
+	// A filtered report must never overwrite the full one.
+	if got := backlogReportName("echo", "/repos/api", "backend", []string{"Aforo", "regimenes-especiales"}); got != "echo-backend-aforo-regimenesespeciales.json" {
+		t.Errorf("con filtro de módulo: %q", got)
+	}
+}
+
+func TestSplitModules(t *testing.T) {
+	if got := splitModules(" aforo, ,Importaciones "); !reflect.DeepEqual(got, []string{"aforo", "Importaciones"}) {
+		t.Errorf("splitModules: %#v", got)
+	}
+	if got := splitModules(""); got != nil {
+		t.Errorf("sin -m no hay filtro: %#v", got)
+	}
+}
+
+func TestFormatModuleCounts(t *testing.T) {
+	got := formatModuleCounts([]backlog.ModuleCount{{Module: "Importaciones", Count: 24}, {Module: "", Count: 3}})
+	if got != "Importaciones 24 · (sin módulo) 3" {
+		t.Errorf("formatModuleCounts: %q", got)
 	}
 }
 

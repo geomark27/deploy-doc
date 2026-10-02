@@ -52,8 +52,11 @@ type Finding struct {
 	Kind     Kind     `json:"tipo"`
 	Severity Severity `json:"severidad"`
 	// Points is a rough size suggestion; the team validates it.
-	Points   int      `json:"puntos"`
-	Title    string   `json:"titulo"`
+	Points int    `json:"puntos"`
+	Title  string `json:"titulo"`
+	// Module is the module of the first file, from Options.Modules. Empty when
+	// no module pattern matches (or none is configured).
+	Module   string   `json:"modulo,omitempty"`
 	Files    []string `json:"archivos"`
 	Evidence []string `json:"evidencia,omitempty"`
 	// Score is the detector's raw measure (fixes, markers, lines…), used to

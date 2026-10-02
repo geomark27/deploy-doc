@@ -34,6 +34,11 @@ type Options struct {
 	// next to the code ("**/*.spec.ts"). When set, it replaces both TestsDir
 	// and the default test name patterns.
 	TestGlobs []string
+	// Modules map paths to modules, first match wins. Each entry is either a
+	// pattern whose {modulo} segment names the module ("app/Http/{modulo}/**")
+	// or a fixed name and a pattern ("Importaciones=resources/views/reportesDai/**").
+	// Empty leaves findings without module.
+	Modules []string
 }
 
 // Generic defaults: none of them is tied to one organization or project.

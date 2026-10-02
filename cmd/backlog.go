@@ -23,6 +23,7 @@ var backlogScanShortFlags = map[string]string{
 	"-r": "--repo",
 	"-l": "--limit",
 	"-o": "--output",
+	"-m": "--modulo",
 }
 
 const defaultBacklogLimit = 10
@@ -49,6 +50,7 @@ func runBacklogScan(args []string) error {
 	_, asJSON := flags["--json"]
 	_, withDeps := flags["--deps"]
 	outputFlag, saveReport := flags["--output"]
+	modules := splitModules(flags["--modulo"])
 
 	cfg, err := config.LoadLocal()
 	if err != nil {
@@ -90,10 +92,19 @@ func runBacklogScan(args []string) error {
 			continue
 		}
 
+		if len(modules) > 0 {
+			if len(rep.Modules) == 0 {
+				reportBacklogFailure(asJSON, t.repo, fmt.Errorf("-m necesita backlog.%s.modules en la config del proyecto (ver: gtt help backlog)", t.repo))
+				failed = append(failed, t.repo)
+				continue
+			}
+			rep.FilterModules(modules)
+		}
+
 		// The saved file keeps every finding; --limit only trims what is shown.
 		savedTo := ""
 		if saveReport {
-			name := backlogReportName(projName, t.dir, t.repo)
+			name := backlogReportName(projName, t.dir, t.repo, modules)
 			if savedTo, err = saveBacklogReport(rep, backlogOutputPath(outputFlag, len(targets), name), name); err != nil {
 				return err
 			}
@@ -107,7 +118,7 @@ func runBacklogScan(args []string) error {
 			printBacklogReport(rep)
 			if savedTo != "" {
 				okLine("Reporte completo guardado en " + savedTo)
-			} else {
+			} else if len(rep.Findings) > 0 {
 				fmt.Println("Usa " + clBold + "-o" + clReset + " para guardar el reporte completo en JSON.")
 			}
 			fmt.Println()
@@ -209,14 +220,31 @@ func reportBacklogFailure(asJSON bool, repo string, err error) {
 
 // backlogReportName is the default file name of a saved report:
 // <project>-<repo>.json, or <folder>-<repo>.json when no project is used.
-func backlogReportName(projName, dir, repoName string) string {
+// A module filter adds the modules (<project>-<repo>-aforo.json), so a
+// filtered report never overwrites the full one.
+func backlogReportName(projName, dir, repoName string, modules []string) string {
 	base := projName
 	if base == "" {
 		if abs, err := filepath.Abs(dir); err == nil {
 			base = filepath.Base(abs)
 		}
 	}
-	return base + "-" + repoName + ".json"
+	name := base + "-" + repoName
+	for _, m := range modules {
+		name += "-" + backlog.ModuleKey(m)
+	}
+	return name + ".json"
+}
+
+// splitModules reads -m: modules separated by commas, blanks dropped.
+func splitModules(v string) []string {
+	var out []string
+	for _, m := range strings.Split(v, ",") {
+		if m = strings.TrimSpace(m); m != "" {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 // saveBacklogReport writes the report as JSON. gtt writes the file itself
@@ -287,6 +315,7 @@ func backlogOptions(rc *config.BacklogRepoConfig, sinceFlag string) backlog.Opti
 			ClassGlobs:  rc.ClassGlobs,
 			TestsDir:    rc.TestsDir,
 			TestGlobs:   rc.TestGlobs,
+			Modules:     rc.Modules,
 		}
 	}
 	if sinceFlag != "" {
@@ -313,6 +342,10 @@ func printBacklogReport(rep *backlog.Report) {
 	}
 
 	if len(rep.Findings) == 0 {
+		if len(rep.ModuleFilter) > 0 {
+			warnLine("Sin hallazgos en el módulo " + strings.Join(rep.ModuleFilter, ", ") + ". Módulos con hallazgos: " + formatModuleCounts(rep.Modules))
+			return
+		}
 		okLine("Sin hallazgos en el período " + rep.Since)
 		return
 	}
@@ -321,10 +354,15 @@ func printBacklogReport(rep *backlog.Report) {
 	points := 0
 	for i, f := range rep.Findings {
 		points += f.Points
-		fmt.Printf("%2d. %s %s  %s %s\n",
+		module := ""
+		if f.Module != "" {
+			module = clr(clBold, f.Module) + " · "
+		}
+		fmt.Printf("%2d. %s %s  %s%s %s\n",
 			i+1,
 			clr(severityColor(f.Severity)+clBold, fmt.Sprintf("[%-5s]", f.Severity)),
 			clr(clBold, fmt.Sprintf("%d pts", f.Points)),
+			module,
 			f.Title,
 			clr(clCyan, "("+string(f.Kind)+" · "+f.ID+")"))
 		// Paths stay slash-separated in the report (stable IDs across OSes);
@@ -338,10 +376,26 @@ func printBacklogReport(rep *backlog.Report) {
 	}
 
 	fmt.Println()
+	if len(rep.Modules) > 0 {
+		fmt.Println("Por módulo: " + formatModuleCounts(rep.Modules))
+	}
 	fmt.Printf("Mostrando %d de %d hallazgos · %s sugeridos en total\n", len(rep.Findings), rep.Total, clr(clBold, fmt.Sprintf("%d pts", points)))
 	if len(rep.Findings) < rep.Total {
 		fmt.Println("Usa " + clBold + "--limit 0" + clReset + " para verlos todos.")
 	}
+}
+
+// formatModuleCounts renders the per-module summary: "Importaciones 24 · Aforo 9".
+func formatModuleCounts(counts []backlog.ModuleCount) string {
+	parts := make([]string, 0, len(counts))
+	for _, c := range counts {
+		name := c.Module
+		if name == "" {
+			name = "(sin módulo)"
+		}
+		parts = append(parts, fmt.Sprintf("%s %d", name, c.Count))
+	}
+	return strings.Join(parts, " · ")
 }
 
 func printBacklogUsage() {
@@ -367,6 +421,7 @@ func printBacklogUsage() {
 	fmt.Print("  -r, --repo      backend o frontend: analiza solo ese repo    (por defecto: todos)\n")
 	fmt.Print("      --path      Carpeta a analizar, aunque no sea un proyecto\n")
 	fmt.Print("      --since     Historial a mirar: 30d, 12w, 3m o una fecha  (por defecto: 90d)\n")
+	fmt.Print("  -m, --modulo    Solo esos módulos, separados por coma         (requiere modules)\n")
 	fmt.Print("  -l, --limit     Hallazgos a mostrar por repo; 0 = todos      (por defecto: 10)\n")
 	fmt.Print("  -o, --output    Guarda el reporte completo en JSON, un archivo por repo\n")
 	fmt.Print("                  Sin ruta: " + defaultBacklogDirHint() + "<proyecto>-<repo>.json\n")
@@ -382,13 +437,17 @@ func printBacklogUsage() {
 	fmt.Print("  dependencia     Paquetes con vulnerabilidades reportadas (solo con --deps)\n\n")
 
 	h("Configuración (opcional):")
-	fmt.Print("  Sin configurar nada funcionan todos los detectores menos sin-test. Para activarlo,\n")
-	fmt.Print("  agrega dentro de tu proyecto en " + configPathHint() + ":\n\n")
+	fmt.Print("  Sin configurar nada funcionan todos los detectores menos sin-test, y los hallazgos\n")
+	fmt.Print("  no llevan módulo. Agrega dentro de tu proyecto en " + configPathHint() + ":\n\n")
 	fmt.Print(clCyan + "    backlog:\n")
 	fmt.Print("      backend:\n")
 	fmt.Print("        class_globs: [\"app/**/Services/**/*.php\"]   # archivos que deberían tener test\n")
+	fmt.Print("        modules: [\"app/Http/{modulo}/**\"]           # dónde está el módulo en la ruta\n")
 	fmt.Print("      frontend:\n")
-	fmt.Print("        class_globs: [\"src/app/**/*.service.ts\"]" + clReset + "\n\n")
+	fmt.Print("        class_globs: [\"src/app/**/*.service.ts\"]\n")
+	fmt.Print("        modules: [\"src/app/{modulo}/**\"]" + clReset + "\n\n")
+	fmt.Print("  modules: gana el primero que coincide. Para casos sueltos o para unificar nombres\n")
+	fmt.Print("  entre repos, Nombre=patrón: \"Importaciones=resources/views/reportesDai/**\".\n\n")
 	fmt.Print("  También acepta: since, min_commits, max_lines, exclude, extensions, tests_dir y\n")
 	fmt.Print("  test_globs. Detalle en la guía: " + backlogGuideURL + "\n\n")
 
@@ -396,6 +455,7 @@ func printBacklogUsage() {
 	fmt.Print("  gtt backlog scan                           # backend y frontend del proyecto por defecto\n")
 	fmt.Print("  gtt backlog scan -o                        # lo mismo y guarda el reporte completo\n")
 	fmt.Print("  gtt backlog scan -r frontend --since 30d   # solo el frontend, último mes\n")
+	fmt.Print("  gtt backlog scan -m aforo                  # solo el módulo Aforo, en los dos repos\n")
 	fmt.Print("  gtt backlog scan -l 0                      # todos los hallazgos, no solo el top 10\n")
 	fmt.Print("  gtt backlog scan --path " + exampleRepoPath() + "    # un repo que no está en tus proyectos\n")
 	fmt.Print("  gtt backlog scan -r backend -o " + exampleReportPath() + "   # un solo repo, a un archivo\n")
