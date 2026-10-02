@@ -21,6 +21,11 @@ type Report struct {
 	Total    int       `json:"total"`
 	Findings []Finding `json:"hallazgos"`
 	Skipped  []Skipped `json:"omitidos,omitempty"`
+	// Modules summarizes every finding of the scan per module, also when
+	// FilterModules later keeps only some of them.
+	Modules []ModuleCount `json:"modulos,omitempty"`
+	// ModuleFilter lists the modules requested with FilterModules, if any.
+	ModuleFilter []string `json:"filtro_modulos,omitempty"`
 }
 
 // Skipped records a detector that did not run or failed, so a short report is
@@ -95,6 +100,17 @@ func Scan(dir string, so ScanOptions) (*Report, error) {
 		} else {
 			findings = append(findings, ds...)
 		}
+	}
+
+	if len(o.Modules) > 0 {
+		patterns, errs := parseModulePatterns(o.Modules)
+		for _, err := range errs {
+			skip("modulos", err)
+		}
+		for i := range findings {
+			findings[i].Module = moduleOf(patterns, findings[i].Files[0])
+		}
+		rep.Modules = countModules(findings)
 	}
 
 	Rank(findings)

@@ -314,6 +314,7 @@ gtt backlog scan [-p <PROYECTO>] [-r backend|frontend] [--path <RUTA>] [--since 
 | `-r` | `--repo` | Solo `backend` o solo `frontend`. Sin este flag se analizan **todos** los repos del proyecto que tengan ruta configurada. Si el proyecto no tiene la ruta pedida, es un error |
 | — | `--path` | Repo a analizar. Tiene prioridad sobre el proyecto; sin proyecto ni `--path` usa la carpeta actual |
 | — | `--since` | Período del historial: `90d`, `12w`, `3m` o cualquier formato de `git log --since`. Por defecto `90d` |
+| `-m` | `--modulo` | Solo los hallazgos de esos módulos, separados por coma (`-m aforo,importaciones`). No distingue mayúsculas ni guiones. Requiere `modules` en la config |
 | `-l` | `--limit` | Cuántos hallazgos mostrar. Por defecto 10; `0` muestra todos |
 | — | `--json` | Imprime los reportes en JSON en vez de la tabla: siempre una lista, con un reporte por repo. Sin mensajes de progreso |
 | `-o` | `--output` | Guarda el reporte **completo** en JSON (UTF-8). Sin ruta va a `~/.config/gtt/backlog/<proyecto>-<repo>.json` (en Windows `%USERPROFILE%\.config\gtt\backlog\`). Un archivo por repo; con varios repos, `-o` recibe una carpeta. `--limit` solo recorta lo que se muestra |
@@ -344,6 +345,9 @@ projects:
     frontend_path: C:\repos\mi-web
     backlog:
       backend:
+        modules:                     # Dónde está el módulo en la ruta (gana el primero que coincide)
+          - "Importaciones=resources/views/reportesDai/**"
+          - "app/Http/{modulo}/**"
         class_globs:                 # Archivos que deberían tener test (soporta **)
           - "app/Http/**/BusinessLogic/**/*.php"
           - "app/Http/**/Services/**/*.php"
@@ -362,6 +366,19 @@ projects:
         test_globs:                  # Tests junto al código: reemplaza a tests_dir
           - "**/*.spec.ts"
 ```
+
+**Módulos.** Con `modules`, cada hallazgo lleva el módulo de su archivo y el reporte termina con un resumen (`Por módulo: Importaciones 24 · Aforo 8 · …`). Cada entrada es una de dos formas, y **gana la primera que coincide**:
+
+| Forma | Ejemplo | Resultado |
+|---|---|---|
+| Patrón con `{modulo}` | `app/Http/{modulo}/**` | `app/Http/Aforo/...` → `Aforo` |
+| `Nombre=patrón` | `Importaciones=resources/views/reportesDai/**` | Todo lo que coincide → `Importaciones` |
+
+- `{modulo}` debe ser una carpeta completa y no puede ir después de `**`. Un archivo suelto (`app/Http/Controller.php`) no es un módulo.
+- Los nombres se escriben en PascalCase para que coincidan entre repos: `src/app/regimenes-especiales/` → `RegimenesEspeciales`, igual que `app/Http/RegimenesEspeciales/`. Si un repo usa otro nombre, se unifica con `Nombre=patrón` (`BaseArancelaria=src/app/arancelario/**`).
+- Para separar una parte de un módulo, se pone su regla antes de la general: `DAI=app/Http/Importaciones/**/Dai*` y después `app/Http/{modulo}/**`.
+- Lo que no coincide con ninguna regla queda como `(sin módulo)`. Una entrada mal escrita se informa como omitida y no detiene el scan.
+- Con `-m` y `-o`, el archivo se llama `<proyecto>-<repo>-<módulo>.json`, para no pisar el reporte completo.
 
 En `sin-test` se deduce el nombre de la clase a partir del archivo y se busca entre los identificadores de los tests:
 
@@ -388,6 +405,9 @@ Por defecto se excluyen `vendor/`, `node_modules/`, `dist/`, `build/`, `storage/
 ```powershell
 # Proyecto por defecto: backend y frontend, últimos 90 días, top 10 de cada uno
 gtt backlog scan
+
+# Solo el módulo Aforo, en backend y frontend
+gtt backlog scan -m aforo
 
 # Frontend del proyecto echo, último mes
 gtt backlog scan -p echo -r frontend --since 30d
