@@ -58,6 +58,10 @@ func CheckLatest(current string) (string, error) {
 	return r.TagName, nil
 }
 
+// IsNewer reports whether candidate is strictly greater than base, with the
+// same rules as the update check (both "vMAJOR.MINOR.PATCH"; "dev" never is).
+func IsNewer(candidate, base string) bool { return isNewer(candidate, base) }
+
 // isNewer returns true only if candidate is strictly greater than base.
 // Both must be in "vMAJOR.MINOR.PATCH" format; any parse failure returns false.
 func isNewer(candidate, base string) bool {

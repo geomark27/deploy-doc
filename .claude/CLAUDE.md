@@ -20,6 +20,7 @@ Commands:
 | `project` | `list` / `ls`, `add`, `default`, `remove`. |
 | `update` | Self-update from GitHub Releases, with SHA-256 verification. |
 | `backlog scan` | Detects technical debt in a local repo (hotspots by churn, markers, large files, untested classes, `composer audit` with `--deps`). Read-only, offline by default, needs no Atlassian credentials (`config.LoadLocal`). |
+| `skill` | `status` (default), `install`, `diff`, `reset`. Manages the `backlog-tareas` Claude Code skill embedded in the binary. |
 | `version`, `help` | — |
 
 ## Commands
@@ -55,6 +56,7 @@ internal/
   atlassian/    HTTP client (Basic Auth) + Jira v3 + Confluence v1/v2
   backlog/      Debt detectors over git history and tracked files (no network)
   document/     ADF construction and section preservation
+  skill/        Embedded backlog-tareas skill: install, manifest, sync
   installer/    Self-install on first run
   updater/      Version check, cached notice, self-update
   build/        Version var (ldflags)
@@ -80,6 +82,16 @@ The flow for `gtt generate`:
 `main.go` asks for confirmation and then calls `installer.Run()` to copy itself
 to `~/.local/bin` (Linux/Mac) or `%LOCALAPPDATA%\Programs\gtt` (Windows) and add
 it to PATH. Running via `go run` skips this (detects `/go-build/` in the path).
+
+**Embedded skill**: `internal/skill/backlog-tareas/` is embedded with
+`//go:embed` and installed to `~/.claude/skills/backlog-tareas` (or
+`$CLAUDE_CONFIG_DIR`). A `.gtt-skill.json` manifest stores each file's SHA-256
+as installed; on startup (`main.go` → `cmd.SyncSkill`, interactive released
+builds only, never `dev`) an untouched older copy is replaced, an edited one is
+never overwritten (the official file is left as `*.nuevo`), and a newer one is
+never downgraded. `local.md` is the user's and is never written after creation.
+Editing the skill is editing shipped content: it follows the same no-corporate-
+data rule as the code (P-008) — team specifics go in `local.md`.
 
 **Update notice**: served from `~/.config/gtt/version_check.json`, refreshed in
 the background at most once per 24h, suppressed when stdout is not a TTY or when
@@ -126,7 +138,8 @@ Covered: `document.ExtractSection` and `Build`, `commitFileURL`, `BuildTitle`,
 `updater.isNewer`, `git.GroupByDirectory`, `explainGitError`, `cmd.parseFlags`,
 `splitHashes`, `sanitizeFilename`, `StorageToText`, `BuildIssueTxt`,
 `config.Load` / `LoadLocal` (isolated from the real config.yaml with a temp HOME),
-the `backlog` detectors and ranking, plus one end-to-end `backlog.Scan` over a
+the `backlog` detectors and ranking, `skill.Diagnose` and the skill
+install/sync lifecycle (temp `CLAUDE_CONFIG_DIR`), plus one end-to-end `backlog.Scan` over a
 throwaway git repo (skipped when git is not installed).
 
 **Never run a built binary to try a change** (`go build -o x && ./x`): run from
