@@ -14,6 +14,8 @@
   - [init](#init)
   - [generate](#generate)
   - [project](#project)
+  - [backlog scan](#backlog-scan)
+  - [skill](#skill)
   - [update](#update)
   - [version](#version)
   - [help](#help)
@@ -432,6 +434,44 @@ gtt backlog scan --path ~/repos/mi-api -o
 gtt backlog scan -r backend -o ~/reportes/backlog.json
 gtt backlog scan -r backend --json | jq '.[0].hallazgos[0]'
 ```
+
+---
+
+### skill
+
+`gtt` incluye la skill **`backlog-tareas`** para Claude Code: convierte los
+hallazgos de `gtt backlog scan` en tareas listas para pegar en Jira ("dame una
+tarea de 4 horas de Facturación").
+
+```bash
+gtt skill            # estado (igual que gtt skill status)
+gtt skill install    # instalarla
+gtt skill diff       # tus cambios frente a la versión oficial (usa git)
+gtt skill reset      # volver a la oficial, con respaldo de tus archivos
+```
+
+**Instalación y actualización automáticas.** Si tienes Claude Code instalado,
+la primera vez que uses `gtt` (después de instalarlo o de un `gtt update`) te
+pregunta si quieres instalar la skill. Si dices que no, no vuelve a preguntar;
+puedes instalarla después con `gtt skill install`. Desde ahí, cada actualización
+de `gtt` trae la versión de la skill que le corresponde y la reemplaza sola.
+
+**Si modificas la skill**, `gtt` lo detecta y **no la sobrescribe**: deja la
+versión oficial al lado como `SKILL.md.nuevo` y te avisa una vez. Revisa las
+diferencias con `gtt skill diff` y vuelve a la oficial con `gtt skill reset`.
+
+**Tus convenciones van en `local.md`**, en la carpeta de la skill. `gtt` lo crea
+la primera vez y nunca lo modifica. La skill lo lee antes de empezar y lo que
+diga tiene prioridad: equivalencia de puntos a horas, formato de rama, documentos
+de estándares y comandos de prueba de cada repo, nombres de tus módulos. Con eso
+no hace falta editar `SKILL.md` y sigues recibiendo las mejoras.
+
+| Sistema | Carpeta de la skill |
+|---|---|
+| Windows | `%USERPROFILE%\.claude\skills\backlog-tareas\` |
+| Linux / macOS | `~/.claude/skills/backlog-tareas/` |
+
+Si usas `CLAUDE_CONFIG_DIR`, la skill va en `$CLAUDE_CONFIG_DIR/skills/backlog-tareas/`.
 
 ---
 

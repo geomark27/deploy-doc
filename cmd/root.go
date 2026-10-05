@@ -46,6 +46,7 @@ var commands = map[string]func([]string) error{
 	"fetch":    runFetch,
 	"f":        runFetch,
 	"backlog":  runBacklog,
+	"skill":    runSkill,
 }
 
 // Execute is the entry point for the CLI.

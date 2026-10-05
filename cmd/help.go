@@ -20,6 +20,7 @@ var commandHelp = map[string]func(){
 	"f":        printFetchUsage,
 	"project":  printProjectUsage,
 	"backlog":  printBacklogUsage,
+	"skill":    printSkillUsage,
 	"update":   printUpdateUsage,
 }
 
@@ -76,7 +77,8 @@ func printUsage() {
 	fmt.Print("  f, fetch          Exporta a .txt la página de Confluence de una tarea\n\n")
 
 	helpSection("Backlog técnico:")
-	fmt.Print("  backlog scan      Detecta deuda técnica y la propone como tareas (sin credenciales)\n\n")
+	fmt.Print("  backlog scan      Detecta deuda técnica y la propone como tareas (sin credenciales)\n")
+	fmt.Print("  skill             Skill backlog-tareas para Claude Code: status, install, diff, reset\n\n")
 
 	helpSection("Mantenimiento:")
 	fmt.Print("  update            Actualiza gtt a la última versión\n")
