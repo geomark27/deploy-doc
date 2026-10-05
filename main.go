@@ -75,6 +75,13 @@ func main() {
 	// One-time migration: move ~/.config/deploy-doc/config.yaml → ~/.config/gtt/
 	config.MigrateIfNeeded()
 
+	// Keep the embedded Claude Code skill in step with this binary. It runs in
+	// the new binary's first command after `gtt update`, so even versions that
+	// predate the skill pick it up without knowing it exists.
+	if shouldSyncSkill() {
+		cmd.SyncSkill()
+	}
+
 	// Update notification. The banner is served from a local cache (instant,
 	// no network) and the GitHub API is only queried in the background once
 	// per checkInterval. Skipped when stdout is not a terminal (pipes, files,
@@ -137,6 +144,37 @@ func shouldCheckUpdate() bool {
 		return false
 	}
 	return true
+}
+
+// shouldSyncSkill limits the automatic skill sync to interactive runs of a
+// released binary: never in pipes or CI (it may prompt), never from `go run`
+// ("dev" would overwrite the user's skill with work in progress), and not for
+// commands that must stay side-effect free or that manage the skill themselves.
+func shouldSyncSkill() bool {
+	if build.Version == "dev" || !isTerminal() || !stdinIsTerminal() {
+		return false
+	}
+	if len(os.Args) < 2 {
+		return false
+	}
+	switch os.Args[1] {
+	case "skill", "update", "version", "--version", "-v", "help", "--help", "-h":
+		return false
+	}
+	for _, a := range os.Args[2:] {
+		if a == "-h" || a == "--help" {
+			return false
+		}
+	}
+	return true
+}
+
+func stdinIsTerminal() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }
 
 func pause(r *bufio.Reader) {

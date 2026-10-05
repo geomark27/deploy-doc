@@ -18,6 +18,7 @@ Cada entrada sigue el formato: **Solicitud → Motivación → Diseño técnico 
 | [v1.4.0](./v1.4.0.md) | 2026-10-01 | Minor | `gtt backlog scan` (deuda técnica), `config.LoadLocal`, 7 bugs del conversor de `fetch`. **Publicado también como v1.3.1 y v1.4.1** (mismo contenido; referencia: v1.4.1) |
 | [v1.4.2](./v1.4.2.md) | 2026-10-02 | Patch | Ayuda en dos niveles (`gtt help <comando>`, `-h`), `-h` que nunca ejecuta, skill `version-check` |
 | [v1.5.0](./v1.5.0.md) | 2026-10-02 | Minor | Módulos en `backlog scan`: `modules` en la config, módulo por hallazgo, resumen por módulo y filtro `-m` |
+| [v1.5.1](./v1.5.1.md) | 2026-10-05 | Patch | Skill `backlog-tareas` embebida en gtt: se instala y actualiza sola, cambios locales detectados y nunca sobrescritos, `gtt skill`, `local.md` |
 
 ---
 
