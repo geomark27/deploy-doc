@@ -305,4 +305,12 @@ automáticamente la próxima vez que abras `gtt`.
 
 ## Licencia
 
-MIT
+Licenciado, a tu elección, bajo cualquiera de las dos licencias siguientes
+(SPDX: `MIT OR Apache-2.0`):
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+Salvo que indiques lo contrario, toda contribución enviada para su inclusión
+en este proyecto queda licenciada bajo ambas licencias, sin términos
+adicionales.
