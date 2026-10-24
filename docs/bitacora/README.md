@@ -19,6 +19,7 @@ Cada entrada sigue el formato: **Solicitud → Motivación → Diseño técnico 
 | [v1.4.2](./v1.4.2.md) | 2026-10-02 | Patch | Ayuda en dos niveles (`gtt help <comando>`, `-h`), `-h` que nunca ejecuta, skill `version-check` |
 | [v1.5.0](./v1.5.0.md) | 2026-10-02 | Minor | Módulos en `backlog scan`: `modules` en la config, módulo por hallazgo, resumen por módulo y filtro `-m` |
 | [v1.5.1](./v1.5.1.md) | 2026-10-05 | Patch | Skill `backlog-tareas` embebida en gtt: se instala y actualiza sola, cambios locales detectados y nunca sobrescritos, `gtt skill`, `local.md` |
+| [v1.5.2](./v1.5.2.md) | 2026-10-24 | Patch | Licencia doble MIT o Apache 2.0: `LICENSE-MIT`, `LICENSE-APACHE` y sección del README |
 
 ---
 
